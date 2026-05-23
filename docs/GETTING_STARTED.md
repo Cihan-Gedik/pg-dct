@@ -39,7 +39,37 @@ make smoke
 
 Beklenen: `/health` → `ok`, `/api/v1/clusters` → `[]`
 
-## 4. İlk cluster (Patroni erişimi olan ortamda)
+## 4. Docker lab (AnyDBVer / logcollector)
+
+İki cluster örneği `config/docker-clusters.yaml` içinde tanımlı:
+
+| ID | Seed Patroni | Docker network |
+|----|----------------|----------------|
+| `lc-pg-main` | http://172.18.0.2:8008 | logcollector-cihangedik-node* |
+| `lc-pg-vanilla` | http://172.19.0.2:8008 | logcollector-dev-cihangedik-node* |
+
+API çalışırken:
+
+```bash
+chmod +x scripts/register-docker-clusters.sh
+./scripts/register-docker-clusters.sh
+```
+
+veya tarayıcıdan: http://127.0.0.1:8080/ui/ → **Bootstrap Docker clusters**
+
+veya:
+
+```bash
+curl -s -X POST http://127.0.0.1:8080/api/v1/bootstrap/docker | python3 -m json.tool
+```
+
+Patroni’ye Mac’ten erişim için container’ların ayakta olduğunu doğrulayın:
+
+```bash
+curl -s http://172.18.0.2:8008/cluster | head
+```
+
+## 5. İlk cluster (manuel, Patroni erişimi olan ortamda)
 
 ```bash
 export PGDCT_PORT=8080

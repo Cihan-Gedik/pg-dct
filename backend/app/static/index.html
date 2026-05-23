@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>PG-DCT</title>
+  <style>
+    :root { color-scheme: dark; font-family: Inter, system-ui, sans-serif; }
+    body { margin: 0; background: #0f172a; color: #e2e8f0; }
+    .wrap { max-width: 1100px; margin: 0 auto; padding: 28px 20px 48px; }
+    h1 { margin: 0; font-size: 1.75rem; letter-spacing: -0.03em; }
+    .sub { color: #94a3b8; margin: 8px 0 24px; font-size: 0.9rem; }
+    .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 24px; }
+    button {
+      border: 1px solid #334155; background: #1e293b; color: #f8fafc;
+      padding: 10px 14px; border-radius: 8px; cursor: pointer; font-weight: 600;
+    }
+    button.primary { background: #2563eb; border-color: #2563eb; }
+    button:hover { filter: brightness(1.08); }
+    .grid { display: grid; gap: 14px; }
+    .card {
+      border: 1px solid #334155; border-radius: 12px; padding: 16px;
+      background: #1e293b;
+    }
+    .card h2 { margin: 0 0 8px; font-size: 1.1rem; }
+    .meta { color: #94a3b8; font-size: 0.85rem; }
+    table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 0.85rem; }
+    th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid #334155; }
+    .role-leader { color: #4ade80; font-weight: 700; }
+    .role-replica { color: #93c5fd; }
+    .log { margin-top: 20px; padding: 12px; background: #020617; border-radius: 8px;
+      font-family: ui-monospace, monospace; font-size: 12px; white-space: pre-wrap; color: #cbd5e1; }
+    a { color: #60a5fa; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>PG-DCT</h1>
+    <p class="sub">Docker lab clusters · Patroni discovery · <a href="/docs">API docs</a></p>
+
+    <div class="actions">
+      <button class="primary" id="btnBootstrap">Bootstrap Docker clusters</button>
+      <button id="btnRefresh">Refresh</button>
+    </div>
+
+    <div class="grid" id="clusters"></div>
+    <div class="log" id="log">Ready.</div>
+  </div>
+
+  <script>
+    const logEl = document.getElementById('log');
+    const clustersEl = document.getElementById('clusters');
+
+    function log(msg) {
+      logEl.textContent = typeof msg === 'string' ? msg : JSON.stringify(msg, null, 2);
+    }
+
+    async function api(path, opts) {
+      const r = await fetch(path, opts);
+      const text = await r.text();
+      let body;
+      try { body = JSON.parse(text); } catch { body = text; }
+      if (!r.ok) throw new Error(typeof body === 'object' ? JSON.stringify(body) : body);
+      return body;
+    }
+
+    function renderCluster(c) {
+      const nodes = (c.nodes || []).map(n => `
+        <tr>
+          <td>${n.member_name}</td>
+          <td>${n.host}</td>
+          <td class="role-${n.role}">${n.role}</td>
+          <td>${n.state || '—'}</td>
+        </tr>`).join('');
+
+      return `
+        <div class="card">
+          <h2>${c.name}</h2>
+          <div class="meta">${c.id} · seed ${c.patroni_seed_url} · poll ${c.poll_interval_sec}s</div>
+          <table>
+            <thead><tr><th>Member</th><th>Host</th><th>Role</th><th>State</th></tr></thead>
+            <tbody>${nodes || '<tr><td colspan="4">No nodes — run discover</td></tr>'}</tbody>
+          </table>
+          <div style="margin-top:12px">
+            <button data-discover="${c.id}">Discover</button>
+          </div>
+        </div>`;
+    }
+
+    async function loadClusters() {
+      const list = await api('/api/v1/clusters');
+      const details = await Promise.all(list.map(x => api(`/api/v1/clusters/${x.id}`)));
+      clustersEl.innerHTML = details.map(renderCluster).join('');
+      clustersEl.querySelectorAll('[data-discover]').forEach(btn => {
+        btn.onclick = async () => {
+          const id = btn.getAttribute('data-discover');
+          log(`Discovering ${id}…`);
+          try {
+            const res = await api(`/api/v1/clusters/${id}/discover`, { method: 'POST' });
+            log(res);
+            await loadClusters();
+          } catch (e) { log(String(e)); }
+        };
+      });
+    }
+
+    document.getElementById('btnRefresh').onclick = () => loadClusters().catch(e => log(String(e)));
+    document.getElementById('btnBootstrap').onclick = async () => {
+      log('Bootstrap docker clusters…');
+      try {
+        const res = await api('/api/v1/bootstrap/docker', { method: 'POST' });
+        log(res);
+        await loadClusters();
+      } catch (e) { log(String(e)); }
+    };
+
+    loadClusters().catch(e => log(String(e)));
+  </script>
+</body>
+</html>

@@ -1,4 +1,4 @@
-.PHONY: install up down logs test smoke dev clean
+.PHONY: install up down logs test smoke dev clean bootstrap-docker
 
 PORT ?= 8080
 
@@ -17,6 +17,10 @@ logs:
 
 smoke:
 	PGDCT_PORT=$(PORT) ./scripts/smoke.sh
+
+bootstrap-docker:
+	chmod +x scripts/register-docker-clusters.sh
+	PGDCT_API=http://127.0.0.1:$(PORT) ./scripts/register-docker-clusters.sh
 
 test:
 	cd backend && (test -d .venv || python3 -m venv .venv) && . .venv/bin/activate && pip install -q -e ".[dev]" && pytest -q && ruff check app tests
