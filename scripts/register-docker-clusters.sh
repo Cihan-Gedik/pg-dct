@@ -1,32 +1,33 @@
 #!/usr/bin/env bash
-# Register AnyDBVer Docker lab clusters and run Patroni discover.
+# Register Docker lab clusters via PG-DCT bootstrap API (idempotent).
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 API="${PGDCT_API:-http://127.0.0.1:8080}"
 
 echo "PG-DCT API: ${API}"
+echo "Checking API health..."
+health=$(curl -s -w "%{http_code}" -o /tmp/pgdct-health.json "${API}/health" || true)
+if [[ "${health}" != "200" ]]; then
+  echo "ERROR: API not reachable at ${API}/health (HTTP ${health})"
+  echo "Start API first:"
+  echo "  cd backend && source .venv/bin/activate && uvicorn app.main:app --reload --port 8080"
+  exit 1
+fi
+cat /tmp/pgdct-health.json
+echo ""
 
-register() {
-  local id="$1" seed="$2" scope="$3"
-  echo "==> Register ${id}"
-  curl -sf -X POST "${API}/api/v1/clusters" \
-    -H 'Content-Type: application/json' \
-    -d "{
-      \"id\": \"${id}\",
-      \"name\": \"${id}\",
-      \"patroni_scope\": \"${scope}\",
-      \"patroni_seed_url\": \"${seed}\",
-      \"poll_interval_sec\": 5
-    }" >/dev/null 2>&1 || true
+echo "Bootstrap from config/docker-clusters.yaml..."
+http_code=$(curl -s -w "%{http_code}" -o /tmp/pgdct-bootstrap.json \
+  -X POST "${API}/api/v1/bootstrap/docker")
+echo "HTTP ${http_code}"
+cat /tmp/pgdct-bootstrap.json
+echo ""
 
-  echo "==> Discover ${id}"
-  curl -sf -X POST "${API}/api/v1/clusters/${id}/discover" | python3 -m json.tool
-  echo ""
-}
+if [[ "${http_code}" != "200" ]]; then
+  echo "ERROR: bootstrap failed"
+  exit 1
+fi
 
-register "lc-pg-main" "http://172.18.0.2:8008" "lc-pg-main"
-register "lc-pg-vanilla" "http://172.19.0.2:8008" "lc-pg-vanilla"
-
-echo "==> All clusters"
-curl -sf "${API}/api/v1/clusters" | python3 -m json.tool
+python3 -m json.tool /tmp/pgdct-bootstrap.json
+echo ""
+echo "Done. Open http://127.0.0.1:8080/ui/"

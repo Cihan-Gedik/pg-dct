@@ -1,10 +1,10 @@
 """Load cluster definitions from YAML (Docker lab, etc.)."""
 
+import json
 from pathlib import Path
 from typing import Any
 
 import yaml
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Cluster
@@ -40,7 +40,6 @@ async def upsert_cluster_from_dict(session: AsyncSession, raw: dict[str, Any]) -
         etcd_endpoints=raw.get("etcd_endpoints"),
         poll_interval_sec=int(raw.get("poll_interval_sec") or 5),
     )
-    import json
 
     existing = await session.get(Cluster, body.id)
     etcd_json = json.dumps(body.etcd_endpoints) if body.etcd_endpoints else None
@@ -51,6 +50,7 @@ async def upsert_cluster_from_dict(session: AsyncSession, raw: dict[str, Any]) -
         existing.patroni_seed_url = str(body.patroni_seed_url)
         existing.etcd_endpoints = etcd_json
         existing.poll_interval_sec = body.poll_interval_sec
+        await session.flush()
         return existing
 
     cluster = Cluster(

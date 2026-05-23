@@ -1,7 +1,9 @@
 # PG-DCT UI
 
-Web interface (Live Monitor, Lets Check Logs, Settings, Bundles).
+React app (Vite). Production build is served by FastAPI at `/ui/`.
 
-Phase 1b: React app consuming `backend` OpenAPI at `/api/v1`.
-
-Design reference: Patroni Insight canvas mockups (log stream, topology, filters).
+```bash
+npm install
+npm run dev    # http://localhost:5173/ui/ (proxies API)
+npm run build  # output -> ../backend/app/static/
+```

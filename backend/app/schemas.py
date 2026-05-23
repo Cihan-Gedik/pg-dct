@@ -1,6 +1,10 @@
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, Field, HttpUrl
+
+LogSource = Literal["patroni", "postgres", "etcd", "os"]
+LogLevel = Literal["critical", "warning", "info"]
 
 
 class NodeRead(BaseModel):
@@ -56,3 +60,38 @@ class DiscoverResult(BaseModel):
     cluster_id: str
     discovered: int
     members: list[NodeRead]
+
+
+class LogEntryRead(BaseModel):
+    ts: str
+    node: str
+    member_name: str
+    source: LogSource
+    level: LogLevel
+    message: str
+
+
+class LogsResponse(BaseModel):
+    cluster_id: str
+    count: int
+    lines: list[LogEntryRead]
+    fetched_at: datetime
+
+
+class LiveMemberRead(BaseModel):
+    name: str
+    host: str
+    role: str
+    state: str | None
+    timeline: int | None = None
+    lag: int | None = None
+
+
+class LiveClusterResponse(BaseModel):
+    cluster_id: str
+    scope: str | None
+    members: list[LiveMemberRead]
+    leader: str | None
+    etcd_quorum: str | None = None
+    max_lag_bytes: int | None = None
+    fetched_at: datetime

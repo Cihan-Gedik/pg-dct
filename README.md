@@ -22,10 +22,10 @@ Verify:
 make smoke
 ```
 
-- API: http://127.0.0.1:8080  
-- Swagger: http://127.0.0.1:8080/docs  
+- **UI:** http://127.0.0.1:8080/ui/  
+- API docs: http://127.0.0.1:8080/docs  
 
-Full guide: [docs/GETTING_STARTED.md](docs/GETTING_STARTED.md)
+Full guide: [docs/INSTALL.md](docs/INSTALL.md) · Docker lab: [docs/DOCKER-LAB.md](docs/DOCKER-LAB.md)
 
 ---
 

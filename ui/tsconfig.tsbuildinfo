@@ -1,0 +1,1 @@
+{"root":["./src/app.tsx","./src/api.ts","./src/main.tsx","./src/components/layout.tsx","./src/components/logstream.tsx","./src/hooks/uselogfilters.ts","./src/pages/bundles.tsx","./src/pages/dashboard.tsx","./src/pages/letschecklogs.tsx","./src/pages/livemonitor.tsx","./src/pages/settings.tsx"],"version":"5.9.3"}

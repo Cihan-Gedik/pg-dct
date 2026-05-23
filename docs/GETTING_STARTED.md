@@ -41,12 +41,19 @@ Beklenen: `/health` → `ok`, `/api/v1/clusters` → `[]`
 
 ## 4. Docker lab (AnyDBVer / logcollector)
 
-İki cluster örneği `config/docker-clusters.yaml` içinde tanımlı:
+Mac host genelde `172.18.x:8008` adresine **doğrudan erişemez** (timeout). Önce port proxy:
 
-| ID | Seed Patroni | Docker network |
-|----|----------------|----------------|
-| `lc-pg-main` | http://172.18.0.2:8008 | logcollector-cihangedik-node* |
-| `lc-pg-vanilla` | http://172.19.0.2:8008 | logcollector-dev-cihangedik-node* |
+```bash
+chmod +x scripts/expose-patroni-ports.sh
+./scripts/expose-patroni-ports.sh
+curl -s http://127.0.0.1:18080/cluster | head
+curl -s http://127.0.0.1:19080/cluster | head
+```
+
+| ID | Seed Patroni (host) | Containers |
+|----|---------------------|------------|
+| `lc-pg-main` | http://127.0.0.1:18080 | logcollector-cihangedik-node* |
+| `lc-pg-vanilla` | http://127.0.0.1:19080 | logcollector-dev-cihangedik-node* |
 
 API çalışırken:
 

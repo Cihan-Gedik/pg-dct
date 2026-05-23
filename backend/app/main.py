@@ -9,6 +9,8 @@ from fastapi.staticfiles import StaticFiles
 
 from app.api.bootstrap import router as bootstrap_router
 from app.api.clusters import router as clusters_router
+from app.api.live import router as live_router
+from app.api.logs import router as logs_router
 from app.config import settings
 from app.db import SessionLocal, init_db
 from app.services.bootstrap import bootstrap_clusters, default_clusters_path
@@ -43,6 +45,8 @@ app.add_middleware(
 
 app.include_router(clusters_router, prefix="/api/v1")
 app.include_router(bootstrap_router, prefix="/api/v1")
+app.include_router(live_router, prefix="/api/v1")
+app.include_router(logs_router, prefix="/api/v1")
 
 if STATIC_DIR.is_dir():
     app.mount("/ui", StaticFiles(directory=str(STATIC_DIR), html=True), name="ui")
