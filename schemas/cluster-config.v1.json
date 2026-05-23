@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pg-dct.dev/schemas/cluster-config.v1.json",
+  "title": "PG-DCT Cluster Configuration",
+  "type": "object",
+  "required": ["id", "name", "engine", "patroni_seed_url"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-_]{1,62}$",
+      "description": "Unique cluster identifier"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "engine": {
+      "type": "string",
+      "enum": ["postgresql"],
+      "description": "Database engine (postgresql today; mysql, mongodb later)"
+    },
+    "patroni_scope": {
+      "type": "string",
+      "description": "Patroni DCS scope; defaults to cluster id"
+    },
+    "patroni_seed_url": {
+      "type": "string",
+      "format": "uri",
+      "description": "Any member Patroni REST base URL, e.g. http://host:8008"
+    },
+    "etcd_endpoints": {
+      "type": "array",
+      "items": { "type": "string", "format": "uri" }
+    },
+    "poll_interval_sec": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 300,
+      "default": 5
+    },
+    "nodes": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/node" }
+    }
+  },
+  "$defs": {
+    "node": {
+      "type": "object",
+      "required": ["member_name", "host"],
+      "properties": {
+        "member_name": { "type": "string" },
+        "host": { "type": "string" },
+        "patroni_port": { "type": "integer", "default": 8008 },
+        "api_url": { "type": "string", "format": "uri" },
+        "role": {
+          "type": "string",
+          "enum": ["leader", "replica", "standby_leader", "unknown"]
+        },
+        "state": { "type": "string" }
+      }
+    }
+  }
+}

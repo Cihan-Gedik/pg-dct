@@ -1,0 +1,39 @@
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.dist/
+build/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+coverage.xml
+htmlcov/
+
+# Env & secrets
+.env
+.env.local
+*.pem
+*.key
+
+# Data & bundles
+*.db
+data/
+bundles/
+uploads/
+
+# Node (ui/)
+node_modules/
+dist/
+.next/
+
+# IDE & OS
+.idea/
+.vscode/
+.DS_Store
+*.swp
+
+# Docker
+deploy/.env
