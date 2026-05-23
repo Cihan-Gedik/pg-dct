@@ -9,7 +9,7 @@ Troubleshooting (live metrics, logs, bundles) is the first module—not the whol
 ## Install (3 commands)
 
 ```bash
-git clone https://github.com/<your-org>/pg-dct.git
+git clone https://github.com/Cihan-Gedik/pg-dct.git
 cd pg-dct
 ./install.sh
 ```
