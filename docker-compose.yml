@@ -1,0 +1,23 @@
+# Run from repo root: docker compose up -d --build
+services:
+  api:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+    ports:
+      - "${PGDCT_PORT:-8080}:8080"
+    environment:
+      PGDCT_DATABASE_URL: sqlite+aiosqlite:////app/backend/data/pgdct.db
+      PGDCT_LOG_LEVEL: ${PGDCT_LOG_LEVEL:-INFO}
+      PGDCT_HTTP_TIMEOUT_SEC: ${PGDCT_HTTP_TIMEOUT_SEC:-10}
+    volumes:
+      - pgdct-data:/app/backend/data
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+volumes:
+  pgdct-data:

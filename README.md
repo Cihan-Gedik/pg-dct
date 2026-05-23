@@ -1,52 +1,51 @@
 # PG-DCT
 
-**PostgreSQL Database Control Toolkit** — operational control plane for database workloads.
+**PostgreSQL Database Control Toolkit** — simple install, operational control for PostgreSQL (Patroni HA first). Planned: guided tasks for **MySQL** and **MongoDB**.
 
-PG-DCT starts with Patroni HA troubleshooting (live metrics, log exploration, diagnostic bundles). The platform is designed to grow into simple, guided tasks across **PostgreSQL**, **MySQL**, and **MongoDB**.
+Troubleshooting (live metrics, logs, bundles) is the first module—not the whole product.
 
-## Current scope (Phase 1)
+---
 
-- Register clusters and nodes (Patroni `GET /cluster` discovery)
-- REST API for cluster inventory
-- Foundation for Live Monitor and Lets Check Logs (UI next)
-
-## Planned scope
-
-| Area | Examples |
-|------|----------|
-| Troubleshooting | Patroni/etcd/PostgreSQL logs, bundles, topology |
-| PostgreSQL | Health checks, replication, common admin tasks |
-| MySQL | Instance inventory, basic diagnostics |
-| MongoDB | Replica set status, simple operations |
-
-## Repository layout
-
-```
-pg-dct/
-├── backend/          # FastAPI — API, poller, discovery
-├── schemas/          # JSON Schema contracts
-├── deploy/           # Docker Compose, env templates
-├── docs/             # Architecture and runbooks
-└── ui/               # Web UI (Phase 1b)
-```
-
-## Quick start
+## Install (3 commands)
 
 ```bash
-cd backend
-python -m venv .venv
-source .venv/bin/activate
-pip install -e ".[dev]"
-cp ../deploy/.env.example ../deploy/.env
-uvicorn app.main:app --reload --port 8080
+git clone https://github.com/<your-org>/pg-dct.git
+cd pg-dct
+./install.sh
 ```
 
-API docs: http://localhost:8080/docs
+Docker is used when available; otherwise a local Python virtualenv is prepared.
 
-### Register a cluster
+Verify:
 
 ```bash
-curl -s -X POST http://localhost:8080/api/v1/clusters \
+make smoke
+```
+
+- API: http://127.0.0.1:8080  
+- Swagger: http://127.0.0.1:8080/docs  
+
+Full guide: [docs/GETTING_STARTED.md](docs/GETTING_STARTED.md)
+
+---
+
+## Make targets
+
+| Command | Description |
+|---------|-------------|
+| `make install` | Run installer |
+| `make up` / `make down` | Docker start/stop |
+| `make smoke` | Health + API smoke test |
+| `make test` | Backend unit tests |
+| `make dev` | Local uvicorn with reload |
+| `make logs` | Follow API logs |
+
+---
+
+## Register a cluster
+
+```bash
+curl -s -X POST http://127.0.0.1:8080/api/v1/clusters \
   -H 'Content-Type: application/json' \
   -d '{
     "id": "prod-ha",
@@ -55,18 +54,31 @@ curl -s -X POST http://localhost:8080/api/v1/clusters \
     "poll_interval_sec": 5
   }'
 
-curl -s -X POST http://localhost:8080/api/v1/clusters/prod-ha/discover
+curl -s -X POST http://127.0.0.1:8080/api/v1/clusters/prod-ha/discover
 ```
 
-## GitHub
+---
 
-Create the remote repository on GitHub named `PG-DCT` or `pg-dct`, then:
+## Repository layout
 
-```bash
-git remote add origin git@github.com:<your-org>/pg-dct.git
-git push -u origin main
 ```
+pg-dct/
+├── install.sh          # One-command setup
+├── docker-compose.yml  # Recommended runtime
+├── backend/            # FastAPI API
+├── ui/                 # Web UI (coming)
+├── schemas/
+└── docs/
+```
+
+## Roadmap
+
+| Phase | Deliverable |
+|-------|-------------|
+| **Now** | Easy install, cluster CRUD, Patroni discover |
+| Next | Settings UI, Live Monitor, log stream |
+| Later | Bundles, MySQL/Mongo connectors |
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT — [LICENSE](LICENSE)
