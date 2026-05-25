@@ -10,6 +10,12 @@ from typing import Literal
 LogSource = Literal["patroni", "postgres", "etcd", "os"]
 LogLevel = Literal["critical", "warning", "info"]
 
+# etcd on healthy nodes spams this when a peer is down but still in the raft group.
+ETCD_PEER_REFUSED = re.compile(
+    r"dial tcp (\d+\.\d+\.\d+\.\d+):2380: connect: connection refused",
+    re.I,
+)
+
 LEVEL_PATTERNS: list[tuple[re.Pattern[str], LogLevel]] = [
     (re.compile(r"\b(FATAL|CRITICAL|PANIC)\b", re.I), "critical"),
     (re.compile(r"\b(ERROR|ERR)\b", re.I), "critical"),
@@ -105,6 +111,21 @@ async def fetch_source_logs(
             )
         )
     return entries
+
+
+def suppress_etcd_peer_noise(entries: list[LogEntry], down_hosts: set[str]) -> list[LogEntry]:
+    if not down_hosts:
+        return entries
+    kept: list[LogEntry] = []
+    for entry in entries:
+        if entry.source != "etcd":
+            kept.append(entry)
+            continue
+        match = ETCD_PEER_REFUSED.search(entry.message)
+        if match and match.group(1) in down_hosts:
+            continue
+        kept.append(entry)
+    return kept
 
 
 async def fetch_cluster_logs(

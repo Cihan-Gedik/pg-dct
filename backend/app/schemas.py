@@ -75,6 +75,7 @@ class LogsResponse(BaseModel):
     cluster_id: str
     count: int
     lines: list[LogEntryRead]
+    peer_noise_filtered: int = 0
     fetched_at: datetime
 
 
@@ -85,6 +86,66 @@ class LiveMemberRead(BaseModel):
     state: str | None
     timeline: int | None = None
     lag: int | None = None
+    switchover_count: int = 0
+    container: str | None = None
+    container_running: bool | None = None
+
+
+class TimelineSegmentRead(BaseModel):
+    role: str
+    start: str
+    end: str
+    leader: str | None = None
+    timeline: int | None = None
+    reason: str = ""
+
+
+class TimelineMemberRead(BaseModel):
+    member: str
+    segments: list[TimelineSegmentRead]
+
+
+class TimelineSwitchRead(BaseModel):
+    at: str
+    leader: str
+    timeline: int | None = None
+    reason: str = ""
+
+
+class DashboardIssueRead(BaseModel):
+    id: str
+    cluster_id: str
+    cluster_name: str
+    level: LogLevel
+    kind: str
+    category: str
+    member_name: str | None
+    host: str | None
+    source: str
+    title: str
+    message: str
+    ts: str | None = None
+    detail: str | None = None
+    occurrence_count: int = 1
+    last_seen: str | None = None
+    first_seen: str | None = None
+
+
+class DashboardIssuesResponse(BaseModel):
+    critical_count: int
+    warning_count: int
+    issues: list[DashboardIssueRead]
+    fetched_at: datetime
+
+
+class ClusterTimelineResponse(BaseModel):
+    cluster_id: str
+    range_start: datetime
+    range_end: datetime
+    current_leader: str | None
+    members: list[TimelineMemberRead]
+    switchovers: list[TimelineSwitchRead]
+    fetched_at: datetime
 
 
 class LiveClusterResponse(BaseModel):
@@ -94,4 +155,49 @@ class LiveClusterResponse(BaseModel):
     leader: str | None
     etcd_quorum: str | None = None
     max_lag_bytes: int | None = None
+    switchover_total: int = 0
+    expected_nodes: int = 0
+    active_nodes: int = 0
+    alerts: list[str] = []
     fetched_at: datetime
+
+
+BackupJobKind = Literal[
+    "backup_full",
+    "backup_diff",
+    "backup_incr",
+    "check",
+    "stanza_create",
+]
+
+
+class BackupInfoResponse(BaseModel):
+    cluster_id: str
+    ok: bool
+    error: str | None = None
+    container: str | None = None
+    member: str | None = None
+    host: str | None = None
+    stanza: str = ""
+    stanzas: list[dict] = []
+    stdout_tail: str | None = None
+    fetched_at: datetime
+
+
+class BackupJobCreate(BaseModel):
+    kind: BackupJobKind
+    params: dict[str, str] = Field(default_factory=dict)
+
+
+class BackupJobRead(BaseModel):
+    id: int
+    cluster_id: str
+    kind: str
+    status: Literal["pending", "running", "succeeded", "failed"]
+    params: dict[str, str] = Field(default_factory=dict)
+    created_at: datetime
+    started_at: datetime | None = None
+    finished_at: datetime | None = None
+    exit_code: int | None = None
+    stdout_tail: str = ""
+    error: str | None = None

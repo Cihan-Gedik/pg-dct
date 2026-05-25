@@ -11,6 +11,7 @@ export function useLogFilters(defaultCluster: string) {
   const [etcd, setEtcd] = useState("include");
   const [osLog, setOsLog] = useState("include");
   const [search, setSearch] = useState("");
+  const [suppressPeerNoise, setSuppressPeerNoise] = useState(false);
 
   const toggleSeverity = useCallback((level: "critical" | "warning" | "info") => {
     setSeverity((prev) => {
@@ -34,8 +35,37 @@ export function useLogFilters(defaultCluster: string) {
     p.set("etcd", etcd);
     p.set("os", osLog);
     p.set("search", search);
+    p.set("suppress_peer_noise", String(suppressPeerNoise));
     return p;
-  }, [node, severity, patroni, postgres, etcd, osLog, search]);
+  }, [node, severity, patroni, postgres, etcd, osLog, search, suppressPeerNoise]);
+
+  const applyPreset = useCallback((preset: "all" | "etcd" | "patroni" | "errors") => {
+    if (preset === "etcd") {
+      setPatroni("exclude");
+      setPostgres("exclude");
+      setEtcd("include");
+      setOsLog("exclude");
+      return;
+    }
+    if (preset === "patroni") {
+      setPatroni("include");
+      setPostgres("exclude");
+      setEtcd("exclude");
+      setOsLog("exclude");
+      return;
+    }
+    if (preset === "errors") {
+      setPatroni("errors");
+      setPostgres("errors");
+      setEtcd("errors");
+      setOsLog("errors");
+      return;
+    }
+    setPatroni("include");
+    setPostgres("include");
+    setEtcd("include");
+    setOsLog("include");
+  }, []);
 
   return {
     clusterId,
@@ -54,6 +84,9 @@ export function useLogFilters(defaultCluster: string) {
     setOsLog,
     search,
     setSearch,
+    suppressPeerNoise,
+    setSuppressPeerNoise,
+    applyPreset,
     params,
   };
 }

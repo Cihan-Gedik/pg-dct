@@ -12,16 +12,23 @@ export type LogFilters = {
   search: string;
 };
 
-type Props = {
+type PanelProps = {
   lines: LogEntry[];
   loading: boolean;
   error: string | null;
   mode: "live" | "archive";
   paused?: boolean;
+  lastRefresh: Date | null;
+  peerNoiseFiltered?: number;
   onRefresh: () => void;
   onPauseToggle?: () => void;
-  children: ReactNode;
+  children?: ReactNode;
 };
+
+function formatTime(d: Date | null): string {
+  if (!d) return "never";
+  return d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+}
 
 export function LogStreamPanel({
   lines,
@@ -29,30 +36,46 @@ export function LogStreamPanel({
   error,
   mode,
   paused,
+  lastRefresh,
+  peerNoiseFiltered = 0,
   onRefresh,
   onPauseToggle,
   children,
-}: Props) {
+}: PanelProps) {
+  const etcdCount = lines.filter((l) => l.source === "etcd").length;
+
   return (
     <div className="log-panel">
       <div className="log-toolbar">
         <strong>Log stream</strong>
         <span className={`badge ${mode === "live" ? "live" : "info"}`}>
-          {mode === "live" ? (paused ? "Paused" : "Live · 5s") : "Archive"}
+          {mode === "live" ? (paused ? "Paused" : "Auto 5s") : "Archive"}
         </span>
         <span className="pill">{lines.length} events</span>
+        <span className="pill">etcd: {etcdCount}</span>
+        <span className={`pill refresh-status ${loading ? "loading" : ""}`}>
+          Updated {formatTime(lastRefresh)}
+        </span>
+        {peerNoiseFiltered > 0 && (
+          <span className="pill" title="Enable “Hide peer noise” to reduce these">
+            {peerNoiseFiltered} peer lines hidden
+          </span>
+        )}
         <div style={{ flex: 1 }} />
         {mode === "live" && onPauseToggle && (
           <button type="button" className="btn" onClick={onPauseToggle}>
-            {paused ? "Resume" : "Pause"}
+            {paused ? "Resume auto" : "Pause auto"}
           </button>
         )}
         <button type="button" className="btn primary" onClick={onRefresh} disabled={loading}>
-          {loading ? "Loading…" : "Refresh"}
+          {loading ? "Refreshing…" : "Refresh logs"}
         </button>
       </div>
       {children}
       {error && <div className="err">{error}</div>}
+      {!loading && lines.length === 0 && !error && (
+        <div className="log-empty">No log lines match filters. Try “etcd only” or clear search.</div>
+      )}
       <div className="log-head">
         <span>Timestamp</span>
         <span>Host</span>
@@ -62,7 +85,7 @@ export function LogStreamPanel({
       </div>
       <div className="log-body">
         {lines.map((line, i) => (
-          <div key={`${line.ts}-${i}`} className={`log-line ${line.level}`}>
+          <div key={`${line.ts}-${line.member_name}-${i}`} className={`log-line ${line.level}`}>
             <span>{line.ts || "—"}</span>
             <span>{line.member_name || line.node}</span>
             <span>{line.source}</span>
@@ -76,6 +99,33 @@ export function LogStreamPanel({
     </div>
   );
 }
+
+type FilterBarProps = {
+  clusters: { id: string; name: string }[];
+  clusterId: string;
+  setClusterId: (v: string) => void;
+  nodes: string[];
+  node: string;
+  setNode: (v: string) => void;
+  severity: Set<"critical" | "warning" | "info">;
+  toggleSeverity: (l: "critical" | "warning" | "info") => void;
+  patroni: string;
+  setPatroni: (v: string) => void;
+  postgres: string;
+  setPostgres: (v: string) => void;
+  etcd: string;
+  setEtcd: (v: string) => void;
+  osLog: string;
+  setOsLog: (v: string) => void;
+  search: string;
+  setSearch: (v: string) => void;
+  suppressPeerNoise: boolean;
+  setSuppressPeerNoise: (v: boolean) => void;
+  onApplyPreset: (p: "all" | "etcd" | "patroni" | "errors") => void;
+  bundleId?: string;
+  setBundleId?: (v: string) => void;
+  showBundle?: boolean;
+};
 
 export function LogFiltersBar({
   clusters,
@@ -96,32 +146,13 @@ export function LogFiltersBar({
   setOsLog,
   search,
   setSearch,
+  suppressPeerNoise,
+  setSuppressPeerNoise,
+  onApplyPreset,
   bundleId,
   setBundleId,
   showBundle,
-}: {
-  clusters: { id: string; name: string }[];
-  clusterId: string;
-  setClusterId: (v: string) => void;
-  nodes: string[];
-  node: string;
-  setNode: (v: string) => void;
-  severity: Set<"critical" | "warning" | "info">;
-  toggleSeverity: (l: "critical" | "warning" | "info") => void;
-  patroni: string;
-  setPatroni: (v: string) => void;
-  postgres: string;
-  setPostgres: (v: string) => void;
-  etcd: string;
-  setEtcd: (v: string) => void;
-  osLog: string;
-  setOsLog: (v: string) => void;
-  search: string;
-  setSearch: (v: string) => void;
-  bundleId?: string;
-  setBundleId?: (v: string) => void;
-  showBundle?: boolean;
-}) {
+}: FilterBarProps) {
   const srcOpts = (
     <>
       <option value="include">Include</option>
@@ -131,17 +162,23 @@ export function LogFiltersBar({
   );
 
   return (
-    <div className="card">
+    <div className="card filters-card">
+      <div className="filters-presets">
+        <span className="filters-presets-label">Quick:</span>
+        <button type="button" className="btn btn-sm" onClick={() => onApplyPreset("all")}>
+          All sources
+        </button>
+        <button type="button" className="btn btn-sm" onClick={() => onApplyPreset("etcd")}>
+          etcd only
+        </button>
+        <button type="button" className="btn btn-sm" onClick={() => onApplyPreset("patroni")}>
+          Patroni only
+        </button>
+        <button type="button" className="btn btn-sm" onClick={() => onApplyPreset("errors")}>
+          Errors only
+        </button>
+      </div>
       <div className="filters">
-        {showBundle && setBundleId && (
-          <div className="field">
-            <label>Bundle</label>
-            <select value={bundleId} onChange={(e) => setBundleId(e.target.value)}>
-              <option value="live">Live tail</option>
-              <option value="bnd-local">Local snapshot</option>
-            </select>
-          </div>
-        )}
         <div className="field">
           <label>Cluster</label>
           <select value={clusterId} onChange={(e) => setClusterId(e.target.value)}>
@@ -152,6 +189,15 @@ export function LogFiltersBar({
             ))}
           </select>
         </div>
+        {showBundle && setBundleId && (
+          <div className="field">
+            <label>Bundle</label>
+            <select value={bundleId} onChange={(e) => setBundleId(e.target.value)}>
+              <option value="live">Live tail</option>
+              <option value="bnd-local">Local snapshot</option>
+            </select>
+          </div>
+        )}
         <div className="field">
           <label>Node</label>
           <select value={node} onChange={(e) => setNode(e.target.value)}>
@@ -202,16 +248,24 @@ export function LogFiltersBar({
             {srcOpts}
           </select>
         </div>
-        <div className="field" style={{ minWidth: 180 }}>
+        <div className="field field-grow">
           <label>Search</label>
           <input
             type="search"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="message, host…"
+            placeholder="message, host, 172.18…"
           />
         </div>
       </div>
+      <label className="filter-checkbox">
+        <input
+          type="checkbox"
+          checked={suppressPeerNoise}
+          onChange={(e) => setSuppressPeerNoise(e.target.checked)}
+        />
+        Hide repeated etcd peer errors (dial tcp …:2380 refused)
+      </label>
     </div>
   );
 }

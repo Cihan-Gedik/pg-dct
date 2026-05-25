@@ -4,6 +4,7 @@ import Bundles from "./pages/Bundles";
 import Dashboard from "./pages/Dashboard";
 import LetsCheckLogs from "./pages/LetsCheckLogs";
 import LiveMonitor from "./pages/LiveMonitor";
+import Backup from "./pages/Backup";
 import Settings from "./pages/Settings";
 
 export default function App() {
@@ -12,6 +13,7 @@ export default function App() {
       <Route element={<Layout />}>
         <Route index element={<Dashboard />} />
         <Route path="live" element={<LiveMonitor />} />
+        <Route path="backup" element={<Backup />} />
         <Route path="logs" element={<LetsCheckLogs />} />
         <Route path="bundles" element={<Bundles />} />
         <Route path="settings" element={<Settings />} />

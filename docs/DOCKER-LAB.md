@@ -2,6 +2,18 @@
 
 Run each block separately. Do not copy comment lines that start with `#`.
 
+## 0. etcd `connection refused` on 172.18.0.2:2380
+
+Bu log, **node0** üzerinde `etcd` / `patroni` servisleri kapalıyken diğer node’ların peer’a bağlanamamasından gelir.
+
+```bash
+chmod +x scripts/heal-lab-node.sh
+./scripts/heal-lab-node.sh logcollector-cihangedik-node0
+./scripts/expose-patroni-ports.sh
+```
+
+PG-DCT log API varsayılan olarak bu satırları down peer için filtreler (`suppress_peer_noise=true`).
+
 ## 1. Patroni port proxy
 
 ```bash

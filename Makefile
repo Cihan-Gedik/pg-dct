@@ -19,7 +19,11 @@ smoke:
 	PGDCT_PORT=$(PORT) ./scripts/smoke.sh
 
 expose-patroni:
-	chmod +x scripts/expose-patroni-ports.sh
+	chmod +x scripts/expose-patroni-ports.sh scripts/heal-lab-node.sh
+	./scripts/expose-patroni-ports.sh
+
+heal-main-node0:
+	./scripts/heal-lab-node.sh logcollector-cihangedik-node0
 	./scripts/expose-patroni-ports.sh
 
 ui-build:

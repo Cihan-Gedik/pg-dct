@@ -9,7 +9,8 @@ from app.db import get_session
 from app.models import Cluster
 from app.schemas import LogEntryRead, LogLevel, LogSource, LogsResponse
 from app.services.cluster_config import load_cluster_docker_hosts
-from app.services.docker_logs import fetch_cluster_logs
+from app.services.docker_logs import fetch_cluster_logs, suppress_etcd_peer_noise
+from app.services.patroni import PatroniDiscoveryError, fetch_cluster_members
 
 router = APIRouter(prefix="/clusters", tags=["logs"])
 
@@ -53,6 +54,7 @@ async def get_cluster_logs(
     os_log: str = Query(default="include", alias="os"),
     search: str = Query(default=""),
     lines: int = Query(default=80, ge=10, le=500),
+    suppress_peer_noise: bool = Query(default=False),
     session: AsyncSession = Depends(get_session),
 ) -> LogsResponse:
     result = await session.execute(
@@ -87,12 +89,33 @@ async def get_cluster_logs(
     if not node_payload:
         raise HTTPException(status_code=400, detail="No nodes in cluster — run discover first")
 
-    raw = await fetch_cluster_logs(node_payload, docker_hosts, active_sources, lines)
+    down_hosts: set[str] = set()
+    if suppress_peer_noise:
+        for n in cluster.nodes:
+            if n.role == "unreachable":
+                down_hosts.add(n.host)
+        try:
+            _, members = await fetch_cluster_members(cluster.patroni_seed_url)
+            seen = {str(m.get("host") or "") for m in members}
+            down_hosts |= {h for h in docker_hosts if h not in seen}
+        except PatroniDiscoveryError:
+            pass
+
+    try:
+        raw = await fetch_cluster_logs(node_payload, docker_hosts, active_sources, lines)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=503, detail=f"Log fetch failed: {exc}") from exc
+    peer_filtered = 0
+    if suppress_peer_noise and down_hosts:
+        before = len(raw)
+        raw = suppress_etcd_peer_noise(raw, down_hosts)
+        peer_filtered = before - len(raw)
     filtered = _filter_logs(raw, node, levels, source_modes, search)
 
     return LogsResponse(
         cluster_id=cluster_id,
         count=len(filtered),
+        peer_noise_filtered=peer_filtered,
         lines=[
             LogEntryRead(
                 ts=e.ts,

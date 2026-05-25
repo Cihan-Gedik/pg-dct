@@ -1,21 +1,43 @@
 import { useCallback, useEffect, useState } from "react";
-import { useSearchParams } from "react-router-dom";
-import { api, type ClusterListItem, type ClusterRead, type LiveCluster, type LogEntry } from "../api";
+import { Link, useSearchParams } from "react-router-dom";
+import { api, type ClusterListItem, type ClusterTimeline, type LiveCluster, type LogEntry } from "../api";
+import { ClusterSelector } from "../components/ClusterSelector";
+import { MemberTable } from "../components/MemberTable";
+import { RoleTimeline } from "../components/RoleTimeline";
 import { LogFiltersBar, LogStreamPanel } from "../components/LogStream";
 import { useLogFilters } from "../hooks/useLogFilters";
 
+type Tab = "overview" | "logs";
+
 export default function LiveMonitor() {
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [clusters, setClusters] = useState<ClusterListItem[]>([]);
-  const [clusterDetail, setClusterDetail] = useState<ClusterRead | null>(null);
   const [live, setLive] = useState<LiveCluster | null>(null);
   const [logs, setLogs] = useState<LogEntry[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
+  const [tab, setTab] = useState<Tab>((searchParams.get("tab") as Tab) || "overview");
+  const [loadingLive, setLoadingLive] = useState(false);
+  const [loadingLogs, setLoadingLogs] = useState(false);
+  const [liveErr, setLiveErr] = useState<string | null>(null);
+  const [logErr, setLogErr] = useState<string | null>(null);
+  const [alerts, setAlerts] = useState<string[]>([]);
+  const [peerNoiseFiltered, setPeerNoiseFiltered] = useState(0);
+  const [lastLiveRefresh, setLastLiveRefresh] = useState<Date | null>(null);
+  const [lastLogRefresh, setLastLogRefresh] = useState<Date | null>(null);
   const [paused, setPaused] = useState(false);
+  const [timeline, setTimeline] = useState<ClusterTimeline | null>(null);
+  const [timelineHours, setTimelineHours] = useState(168);
+  const [loadingTimeline, setLoadingTimeline] = useState(false);
+  const [timelineErr, setTimelineErr] = useState<string | null>(null);
 
   const initial = searchParams.get("cluster") || "lc-pg-main";
   const filters = useLogFilters(initial);
+
+  useEffect(() => {
+    const fromUrl = searchParams.get("cluster");
+    if (fromUrl && fromUrl !== filters.clusterId) {
+      filters.setClusterId(fromUrl);
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     api.listClusters().then((list) => {
@@ -26,138 +48,249 @@ export default function LiveMonitor() {
     });
   }, []);
 
-  const nodes = clusterDetail?.nodes.map((n) => n.member_name) ?? [];
+  const nodes = live?.members.map((m) => m.name) ?? [];
 
-  const refresh = useCallback(async () => {
+  const onClusterChange = useCallback(
+    (id: string) => {
+      filters.setClusterId(id);
+      const next = new URLSearchParams(searchParams);
+      next.set("cluster", id);
+      setSearchParams(next, { replace: true });
+    },
+    [filters, searchParams, setSearchParams],
+  );
+
+  const setActiveTab = (t: Tab) => {
+    setTab(t);
+    const next = new URLSearchParams(searchParams);
+    next.set("tab", t);
+    setSearchParams(next, { replace: true });
+  };
+
+  const refreshTimeline = useCallback(async () => {
     if (!filters.clusterId) return;
-    setLoading(true);
-    setErr(null);
+    setLoadingTimeline(true);
+    setTimelineErr(null);
     try {
-      const [detail, liveData, logData] = await Promise.all([
-        api.getCluster(filters.clusterId),
-        api.live(filters.clusterId),
-        api.logs(filters.clusterId, filters.params),
-      ]);
-      setClusterDetail(detail);
-      setLive(liveData);
-      setLogs(logData.lines);
+      setTimeline(await api.timeline(filters.clusterId, timelineHours));
     } catch (e) {
-      setErr(String(e));
+      setTimelineErr(String(e));
     } finally {
-      setLoading(false);
+      setLoadingTimeline(false);
+    }
+  }, [filters.clusterId, timelineHours]);
+
+  const refreshLive = useCallback(async () => {
+    if (!filters.clusterId) return;
+    setLoadingLive(true);
+    setLiveErr(null);
+    try {
+      const liveData = await api.live(filters.clusterId);
+      setLive(liveData);
+      setAlerts(liveData.alerts ?? []);
+      setLastLiveRefresh(new Date());
+    } catch (e) {
+      setLiveErr(String(e));
+    } finally {
+      setLoadingLive(false);
+    }
+  }, [filters.clusterId]);
+
+  const refreshLogs = useCallback(async () => {
+    if (!filters.clusterId) return;
+    setLoadingLogs(true);
+    setLogErr(null);
+    try {
+      const logData = await api.logs(filters.clusterId, filters.params);
+      setLogs(logData.lines);
+      setPeerNoiseFiltered(logData.peer_noise_filtered ?? 0);
+      setLastLogRefresh(new Date());
+    } catch (e) {
+      setLogErr(String(e));
+    } finally {
+      setLoadingLogs(false);
     }
   }, [filters.clusterId, filters.params]);
 
+  const refreshAll = useCallback(async () => {
+    await Promise.all([refreshLive(), refreshTimeline(), refreshLogs()]);
+  }, [refreshLive, refreshTimeline, refreshLogs]);
+
   useEffect(() => {
-    refresh();
-  }, [refresh]);
+    refreshLive();
+    refreshTimeline();
+  }, [filters.clusterId]);
+
+  useEffect(() => {
+    refreshTimeline();
+  }, [timelineHours, refreshTimeline]);
+
+  useEffect(() => {
+    if (tab === "logs") refreshLogs();
+  }, [tab, refreshLogs]);
 
   useEffect(() => {
     if (paused) return;
-    const t = setInterval(refresh, 5000);
+    const t = setInterval(() => {
+      refreshLive();
+      if (tab === "overview") refreshTimeline();
+      if (tab === "logs") refreshLogs();
+    }, 5000);
     return () => clearInterval(t);
-  }, [paused, refresh]);
+  }, [paused, tab, refreshLive, refreshTimeline, refreshLogs]);
+
+  const leaderMember = live?.members.find((m) => m.role === "leader");
 
   return (
-    <>
-      <h1>Live Monitor</h1>
-      <p className="sub">
-        {live?.scope ?? filters.clusterId} · leader {live?.leader ?? "—"} · auto refresh 5s
-      </p>
+    <div className="live-page live-page-simple">
+      <header className="page-header compact">
+        <div>
+          <h1>Live Monitor</h1>
+          <p className="sub">One cluster at a time — overview and logs</p>
+        </div>
+        <div className="row header-actions">
+          <button type="button" className="btn primary" disabled={loadingLive || loadingLogs} onClick={refreshAll}>
+            {loadingLive || loadingLogs ? "Refreshing…" : "Refresh"}
+          </button>
+          <button type="button" className="btn" onClick={() => setPaused((p) => !p)}>
+            {paused ? "Resume 5s" : "Pause"}
+          </button>
+        </div>
+      </header>
 
-      <div className="stats">
-        <div className="stat">
-          <div className="v">{live?.leader?.split("-").pop() ?? "—"}</div>
-          <div className="l">Leader</div>
-        </div>
-        <div className="stat">
-          <div className="v">3/3</div>
-          <div className="l">etcd quorum</div>
-        </div>
-        <div className="stat">
-          <div className="v">{live?.max_lag_bytes ?? 0}</div>
-          <div className="l">Max lag (bytes)</div>
-        </div>
-        <div className="stat">
-          <div className="v">{live?.members[0]?.state ?? "—"}</div>
-          <div className="l">Primary state</div>
-        </div>
-      </div>
+      <section className="cluster-bar card">
+        <ClusterSelector clusters={clusters} selectedId={filters.clusterId} onSelect={onClusterChange} />
+      </section>
 
-      <div className="topology">
-        <div className="topo-box">
-          <h3>Patroni cluster</h3>
-          {live?.members.map((m) => (
-            <div key={m.name} className={`node-chip ${m.role === "leader" ? "leader" : ""}`}>
-              <div>
-                <strong>{m.name}</strong>
+      <nav className="page-tabs" role="tablist">
+        <button
+          type="button"
+          role="tab"
+          className={tab === "overview" ? "active" : ""}
+          aria-selected={tab === "overview"}
+          onClick={() => setActiveTab("overview")}
+        >
+          Overview
+          {live?.leader && <span className="tab-meta"> · {live.leader}</span>}
+        </button>
+        <button
+          type="button"
+          role="tab"
+          className={tab === "logs" ? "active" : ""}
+          aria-selected={tab === "logs"}
+          onClick={() => setActiveTab("logs")}
+        >
+          Logs
+          <span className="tab-meta"> · {logs.length} lines</span>
+        </button>
+        <Link className="tab-link" to={`/logs?cluster=${filters.clusterId}`}>
+          Open full log view →
+        </Link>
+      </nav>
+
+      {tab === "overview" && (
+        <section className="tab-panel">
+          {liveErr && <div className="err">{liveErr}</div>}
+          {loadingLive && !live && <p className="pill">Loading…</p>}
+
+          {live && (
+            <>
+              {alerts.length > 0 && (
+                <div className="alert-banner">
+                  {alerts.map((a) => (
+                    <p key={a}>{a}</p>
+                  ))}
+                </div>
+              )}
+
+              <div className="overview-summary card">
+                <div className="overview-row">
+                  <span>
+                    <strong>Scope</strong> {live.scope}
+                  </span>
+                  <span>
+                    <strong>Primary</strong> {live.leader ?? "—"} ({leaderMember?.state ?? "—"})
+                  </span>
+                  <span>
+                    <strong>Nodes</strong> {live.active_nodes}/{live.expected_nodes}
+                  </span>
+                  <span>
+                    <strong>Switchovers</strong> {live.switchover_total}
+                  </span>
+                  <span className={`pill refresh-status ${loadingLive ? "loading" : ""}`}>
+                    {lastLiveRefresh ? lastLiveRefresh.toLocaleTimeString() : "—"}
+                  </span>
+                </div>
               </div>
-              <div className={`badge ${m.role === "leader" ? "leader" : "replica"}`}>{m.role}</div>
-              <div className="pill">{m.state}</div>
-            </div>
-          ))}
-        </div>
-      </div>
 
-      {clusterDetail && (
-        <div className="card">
-          <table>
-            <thead>
-              <tr>
-                <th>Member</th>
-                <th>Host</th>
-                <th>role</th>
-                <th>state</th>
-              </tr>
-            </thead>
-            <tbody>
-              {clusterDetail.nodes.map((n) => (
-                <tr key={n.id}>
-                  <td>{n.member_name}</td>
-                  <td>{n.host}</td>
-                  <td>
-                    <span className={`badge ${n.role === "leader" ? "leader" : "replica"}`}>{n.role}</span>
-                  </td>
-                  <td>{n.state}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              <div className="stats stats-compact">
+                <div className="stat">
+                  <div className="v">{live.etcd_quorum ?? "—"}</div>
+                  <div className="l">Quorum</div>
+                </div>
+                <div className="stat">
+                  <div className="v">{live.max_lag_bytes ?? 0}</div>
+                  <div className="l">Max lag</div>
+                </div>
+                <div className="stat">
+                  <div className="v">{live.members.length}</div>
+                  <div className="l">Members shown</div>
+                </div>
+              </div>
+
+              <RoleTimeline
+                data={timeline}
+                loading={loadingTimeline}
+                hours={timelineHours}
+                onHoursChange={setTimelineHours}
+                error={timelineErr}
+              />
+
+              <MemberTable members={live.members} leader={live.leader} />
+            </>
+          )}
+        </section>
       )}
 
-      <LogFiltersBar
-        clusters={clusters}
-        clusterId={filters.clusterId}
-        setClusterId={filters.setClusterId}
-        nodes={nodes}
-        node={filters.node}
-        setNode={filters.setNode}
-        severity={filters.severity}
-        toggleSeverity={filters.toggleSeverity}
-        patroni={filters.patroni}
-        setPatroni={filters.setPatroni}
-        postgres={filters.postgres}
-        setPostgres={filters.setPostgres}
-        etcd={filters.etcd}
-        setEtcd={filters.setEtcd}
-        osLog={filters.osLog}
-        setOsLog={filters.setOsLog}
-        search={filters.search}
-        setSearch={filters.setSearch}
-      />
+      {tab === "logs" && (
+        <section className="tab-panel">
+          <LogFiltersBar
+            clusters={clusters}
+            clusterId={filters.clusterId}
+            setClusterId={onClusterChange}
+            nodes={nodes}
+            node={filters.node}
+            setNode={filters.setNode}
+            severity={filters.severity}
+            toggleSeverity={filters.toggleSeverity}
+            patroni={filters.patroni}
+            setPatroni={filters.setPatroni}
+            postgres={filters.postgres}
+            setPostgres={filters.setPostgres}
+            etcd={filters.etcd}
+            setEtcd={filters.setEtcd}
+            osLog={filters.osLog}
+            setOsLog={filters.setOsLog}
+            search={filters.search}
+            setSearch={filters.setSearch}
+            suppressPeerNoise={filters.suppressPeerNoise}
+            setSuppressPeerNoise={filters.setSuppressPeerNoise}
+            onApplyPreset={filters.applyPreset}
+          />
 
-      <LogStreamPanel
-        lines={logs}
-        loading={loading}
-        error={err}
-        mode="live"
-        paused={paused}
-        onRefresh={refresh}
-        onPauseToggle={() => setPaused((p) => !p)}
-      >
-        <span />
-      </LogStreamPanel>
-    </>
+          <LogStreamPanel
+            lines={logs}
+            loading={loadingLogs}
+            error={logErr}
+            mode="live"
+            paused={paused}
+            lastRefresh={lastLogRefresh}
+            peerNoiseFiltered={peerNoiseFiltered}
+            onRefresh={refreshLogs}
+            onPauseToggle={() => setPaused((p) => !p)}
+          />
+        </section>
+      )}
+    </div>
   );
 }

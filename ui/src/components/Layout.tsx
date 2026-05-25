@@ -3,6 +3,7 @@ import { NavLink, Outlet } from "react-router-dom";
 const links = [
   { to: "/", label: "Dashboard" },
   { to: "/live", label: "Live Monitor" },
+  { to: "/backup", label: "Backup" },
   { to: "/logs", label: "Lets Check Logs" },
   { to: "/bundles", label: "Bundles" },
   { to: "/settings", label: "Settings" },

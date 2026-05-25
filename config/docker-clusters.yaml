@@ -4,6 +4,9 @@ clusters:
     patroni_scope: lc-pg-main
     patroni_seed_url: http://127.0.0.1:18080
     poll_interval_sec: 5
+    # pgbackrest:
+    #   enabled: true
+    #   stanza: lc-pg-main
     docker_hosts:
       "172.18.0.2": logcollector-cihangedik-node0
       "172.18.0.3": logcollector-cihangedik-node1

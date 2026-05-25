@@ -1,3 +1,22 @@
+export type DashboardIssue = {
+  id: string;
+  cluster_id: string;
+  cluster_name: string;
+  level: "critical" | "warning" | "info";
+  kind: string;
+  category: string;
+  member_name: string | null;
+  host: string | null;
+  source: string;
+  title: string;
+  message: string;
+  ts: string | null;
+  detail: string | null;
+  occurrence_count: number;
+  last_seen: string | null;
+  first_seen: string | null;
+};
+
 export type ClusterListItem = {
   id: string;
   name: string;
@@ -33,12 +52,81 @@ export type LogEntry = {
   message: string;
 };
 
+export type LiveMember = {
+  name: string;
+  host: string;
+  role: string;
+  state: string | null;
+  timeline?: number | null;
+  lag?: number | null;
+  switchover_count: number;
+  container?: string | null;
+  container_running?: boolean | null;
+};
+
+export type TimelineSegment = {
+  role: string;
+  start: string;
+  end: string;
+  leader?: string | null;
+  timeline?: number | null;
+  reason: string;
+};
+
+export type ClusterTimeline = {
+  cluster_id: string;
+  range_start: string;
+  range_end: string;
+  current_leader: string | null;
+  members: { member: string; segments: TimelineSegment[] }[];
+  switchovers: { at: string; leader: string; timeline?: number | null; reason: string }[];
+};
+
+export type BackupJobKind =
+  | "backup_full"
+  | "backup_diff"
+  | "backup_incr"
+  | "check"
+  | "stanza_create";
+
+export type BackupInfo = {
+  cluster_id: string;
+  ok: boolean;
+  error: string | null;
+  container: string | null;
+  member: string | null;
+  host: string | null;
+  stanza: string;
+  stanzas: Record<string, unknown>[];
+  stdout_tail: string | null;
+  fetched_at: string;
+};
+
+export type BackupJob = {
+  id: number;
+  cluster_id: string;
+  kind: string;
+  status: "pending" | "running" | "succeeded" | "failed";
+  params: Record<string, string>;
+  created_at: string;
+  started_at: string | null;
+  finished_at: string | null;
+  exit_code: number | null;
+  stdout_tail: string;
+  error: string | null;
+};
+
 export type LiveCluster = {
   cluster_id: string;
   scope: string | null;
-  members: { name: string; host: string; role: string; state: string | null; lag?: number }[];
+  members: LiveMember[];
   leader: string | null;
   max_lag_bytes: number | null;
+  switchover_total: number;
+  expected_nodes: number;
+  active_nodes: number;
+  alerts: string[];
+  etcd_quorum?: string | null;
 };
 
 const API = "";
@@ -62,10 +150,29 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 export const api = {
   health: () => request<{ status: string }>("/health"),
   listClusters: () => request<ClusterListItem[]>("/api/v1/clusters"),
+  dashboardIssues: () =>
+    request<{ critical_count: number; warning_count: number; issues: DashboardIssue[] }>(
+      "/api/v1/dashboard/issues",
+    ),
   getCluster: (id: string) => request<ClusterRead>(`/api/v1/clusters/${id}`),
   discover: (id: string) => request<unknown>(`/api/v1/clusters/${id}/discover`, { method: "POST" }),
   bootstrapDocker: () => request<unknown>("/api/v1/bootstrap/docker", { method: "POST" }),
   live: (id: string) => request<LiveCluster>(`/api/v1/clusters/${id}/live`),
-  logs: (id: string, params: URLSearchParams) =>
-    request<{ count: number; lines: LogEntry[] }>(`/api/v1/clusters/${id}/logs?${params}`),
+  timeline: (id: string, hours: number) =>
+    request<ClusterTimeline>(`/api/v1/clusters/${id}/timeline?hours=${hours}`),
+  logs: (id: string, params: URLSearchParams) => {
+    const q = new URLSearchParams(params);
+    q.set("_ts", String(Date.now()));
+    return request<{ count: number; lines: LogEntry[]; peer_noise_filtered?: number; fetched_at?: string }>(
+      `/api/v1/clusters/${id}/logs?${q}`,
+    );
+  },
+  backupInfo: (id: string) => request<BackupInfo>(`/api/v1/clusters/${id}/backup/info`),
+  backupJobs: (id: string) => request<BackupJob[]>(`/api/v1/clusters/${id}/backup/jobs`),
+  createBackupJob: (id: string, body: { kind: BackupJobKind; params?: Record<string, string> }) =>
+    request<BackupJob>(`/api/v1/clusters/${id}/backup/jobs`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }),
 };

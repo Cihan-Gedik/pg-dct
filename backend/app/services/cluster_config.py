@@ -25,3 +25,21 @@ def all_cluster_ids_from_yaml() -> list[str]:
         return []
     data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     return [str(c["id"]) for c in (data.get("clusters") or []) if c.get("id")]
+
+
+def load_cluster_pgbackrest(cluster_id: str) -> dict[str, str | bool]:
+    """Optional pgBackRest block from docker-clusters.yaml."""
+    path = default_clusters_path()
+    if not path.is_file():
+        return {"enabled": False, "stanza": ""}
+    data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    for raw in data.get("clusters") or []:
+        if str(raw.get("id")) != cluster_id:
+            continue
+        pgb = raw.get("pgbackrest") or {}
+        if not isinstance(pgb, dict):
+            return {"enabled": False, "stanza": ""}
+        stanza = str(pgb.get("stanza") or "").strip()
+        enabled = bool(pgb.get("enabled", bool(stanza)))
+        return {"enabled": enabled, "stanza": stanza}
+    return {"enabled": False, "stanza": ""}
