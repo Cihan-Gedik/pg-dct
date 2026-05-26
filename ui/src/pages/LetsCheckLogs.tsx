@@ -18,11 +18,16 @@ export default function LetsCheckLogs() {
   const [nodes, setNodes] = useState<string[]>([]);
 
   const initial = searchParams.get("cluster") || "lc-pg-main";
-  const filters = useLogFilters(initial);
+  const severityFromUrl = searchParams.get("severity");
+  const filters = useLogFilters(initial, severityFromUrl);
 
   useEffect(() => {
     api.listClusters().then(setClusters);
   }, []);
+
+  useEffect(() => {
+    filters.applySeverityParam(severityFromUrl);
+  }, [severityFromUrl, filters.applySeverityParam]);
 
   const onClusterChange = useCallback(
     (id: string) => {

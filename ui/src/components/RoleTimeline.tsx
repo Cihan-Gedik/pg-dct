@@ -14,6 +14,8 @@ type Props = {
   hours: number;
   onHoursChange: (h: number) => void;
   error: string | null;
+  /** Dashboard panel already has a title — skip outer card chrome. */
+  embedded?: boolean;
 };
 
 function parseMs(iso: string): number {
@@ -38,7 +40,7 @@ function memberShort(name: string): string {
   return tail.length <= 4 ? tail : name.slice(0, 3).toUpperCase();
 }
 
-export function RoleTimeline({ data, loading, hours, onHoursChange, error }: Props) {
+export function RoleTimeline({ data, loading, hours, onHoursChange, error, embedded = false }: Props) {
   const [hover, setHover] = useState<{
     member: string;
     role: string;
@@ -65,8 +67,9 @@ export function RoleTimeline({ data, loading, hours, onHoursChange, error }: Pro
   if (loading && !data) return <p className="pill">Loading timeline…</p>;
   if (!data || !range) return null;
 
-  return (
-    <div className="card rt-v2">
+  const inner = (
+    <>
+      {!embedded && (
       <div className="rt-v2-head">
         <div>
           <h3 className="section-title">Leadership timeline</h3>
@@ -85,6 +88,24 @@ export function RoleTimeline({ data, loading, hours, onHoursChange, error }: Pro
           ))}
         </div>
       </div>
+      )}
+      {embedded && (
+        <div className="rt-v2-head embedded">
+          <p className="pill">Who was primary over time · hover segments for details</p>
+          <div className="timeline-range">
+            {RANGE_OPTIONS.map((o) => (
+              <button
+                key={o.hours}
+                type="button"
+                className={`btn btn-sm ${hours === o.hours ? "primary" : ""}`}
+                onClick={() => onHoursChange(o.hours)}
+              >
+                {o.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="rt-v2-legend">
         <span className="rt-legend-pill primary">Primary</span>
@@ -198,6 +219,9 @@ export function RoleTimeline({ data, loading, hours, onHoursChange, error }: Pro
           )}
         </div>
       )}
-    </div>
+    </>
   );
+
+  if (embedded) return <div className="rt-v2 rt-v2-embedded">{inner}</div>;
+  return <div className="card rt-v2">{inner}</div>;
 }
