@@ -28,6 +28,7 @@ uploads/
 node_modules/
 dist/
 .next/
+*.tsbuildinfo
 
 # IDE & OS
 .idea/
