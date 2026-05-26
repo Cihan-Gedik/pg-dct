@@ -1,6 +1,13 @@
 import { useNavigate } from "react-router-dom";
 import type { DashboardIssue, LogEntry } from "../api";
 
+const RANGE_OPTIONS = [
+  { label: "6h", hours: 6 },
+  { label: "24h", hours: 24 },
+  { label: "7d", hours: 168 },
+  { label: "30d", hours: 720 },
+] as const;
+
 type FeedItem = {
   key: string;
   level: "critical" | "warning" | "info";
@@ -25,17 +32,36 @@ function toFeedItems(issues: DashboardIssue[], logs: LogEntry[], limit: number):
   }));
 }
 
+function countLevels(issues: DashboardIssue[], logs: LogEntry[]) {
+  if (issues.length) {
+    return {
+      critical: issues.filter((i) => i.level === "critical").length,
+      warning: issues.filter((i) => i.level === "warning").length,
+    };
+  }
+  return {
+    critical: logs.filter((l) => l.level === "critical").length,
+    warning: logs.filter((l) => l.level === "warning").length,
+  };
+}
+
+function rangeLabel(hours: number): string {
+  const opt = RANGE_OPTIONS.find((o) => o.hours === hours);
+  return opt ? `Last ${opt.label}` : `Last ${hours}h`;
+}
+
 type Props = {
   clusterId: string;
-  criticalCount: number;
-  warningCount: number;
+  hours: number;
+  onHoursChange: (hours: number) => void;
   issues: DashboardIssue[];
   logLines: LogEntry[];
 };
 
-export function IncidentFeedMini({ clusterId, criticalCount, warningCount, issues, logLines }: Props) {
+export function IncidentFeedMini({ clusterId, hours, onHoursChange, issues, logLines }: Props) {
   const navigate = useNavigate();
   const items = toFeedItems(issues, logLines, 8);
+  const { critical: criticalCount, warning: warningCount } = countLevels(issues, logLines);
 
   const openLogs = (focus?: "critical" | "warning") => {
     const severity =
@@ -50,6 +76,22 @@ export function IncidentFeedMini({ clusterId, criticalCount, warningCount, issue
 
   return (
     <div className="incident-mini incident-mini-split">
+      <div className="incident-mini-range-row">
+        <span className="pill incident-mini-window">{rangeLabel(hours)}</span>
+        <div className="timeline-range incident-mini-range">
+          {RANGE_OPTIONS.map((o) => (
+            <button
+              key={o.hours}
+              type="button"
+              className={`btn btn-sm ${hours === o.hours ? "primary" : ""}`}
+              onClick={() => onHoursChange(o.hours)}
+            >
+              {o.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
       <div className="incident-mini-top">
         <div className="incident-mini-kpi">
           <button type="button" className="incident-mini-box critical" onClick={() => openLogs("critical")}>
@@ -87,7 +129,7 @@ export function IncidentFeedMini({ clusterId, criticalCount, warningCount, issue
           </li>
         ))}
         {!items.length && (
-          <li className="incident-mini-empty muted">No recent critical/warning events.</li>
+          <li className="incident-mini-empty muted">No critical/warning events in {rangeLabel(hours).toLowerCase()}.</li>
         )}
       </ul>
     </div>

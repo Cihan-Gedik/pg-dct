@@ -64,6 +64,28 @@ export type LiveMember = {
   container_running?: boolean | null;
 };
 
+export type EtcdMember = {
+  name: string;
+  member_id: string;
+  host: string;
+  role: string;
+  state: string;
+  client_url: string;
+  peer_url: string;
+  container?: string | null;
+  container_running?: boolean | null;
+};
+
+export type DcsStatus = {
+  patroni_leader: string | null;
+  patroni_leader_host: string | null;
+  failover_candidates: string[];
+  etcd_raft_leader: string | null;
+  etcd_raft_leader_id: string | null;
+  etcd_cluster_id: string | null;
+  etcd_raft_term: number | null;
+};
+
 export type TimelineSegment = {
   role: string;
   start: string;
@@ -127,6 +149,8 @@ export type LiveCluster = {
   active_nodes: number;
   alerts: string[];
   etcd_quorum?: string | null;
+  etcd_members?: EtcdMember[];
+  dcs?: DcsStatus | null;
 };
 
 const API = "";
@@ -150,10 +174,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 export const api = {
   health: () => request<{ status: string }>("/health"),
   listClusters: () => request<ClusterListItem[]>("/api/v1/clusters"),
-  dashboardIssues: () =>
-    request<{ critical_count: number; warning_count: number; issues: DashboardIssue[] }>(
-      "/api/v1/dashboard/issues",
-    ),
+  dashboardIssues: (hours?: number) => {
+    const q = hours != null ? `?hours=${hours}` : "";
+    return request<{ critical_count: number; warning_count: number; issues: DashboardIssue[] }>(
+      `/api/v1/dashboard/issues${q}`,
+    );
+  },
   getCluster: (id: string) => request<ClusterRead>(`/api/v1/clusters/${id}`),
   discover: (id: string) => request<unknown>(`/api/v1/clusters/${id}/discover`, { method: "POST" }),
   bootstrapDocker: () => request<unknown>("/api/v1/bootstrap/docker", { method: "POST" }),

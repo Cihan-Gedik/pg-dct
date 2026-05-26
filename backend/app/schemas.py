@@ -91,6 +91,28 @@ class LiveMemberRead(BaseModel):
     container_running: bool | None = None
 
 
+class EtcdMemberRead(BaseModel):
+    name: str
+    member_id: str
+    host: str
+    role: str
+    state: str
+    client_url: str = ""
+    peer_url: str = ""
+    container: str | None = None
+    container_running: bool | None = None
+
+
+class DcsStatusRead(BaseModel):
+    patroni_leader: str | None = None
+    patroni_leader_host: str | None = None
+    failover_candidates: list[str] = []
+    etcd_raft_leader: str | None = None
+    etcd_raft_leader_id: str | None = None
+    etcd_cluster_id: str | None = None
+    etcd_raft_term: int | None = None
+
+
 class TimelineSegmentRead(BaseModel):
     role: str
     start: str
@@ -154,6 +176,8 @@ class LiveClusterResponse(BaseModel):
     members: list[LiveMemberRead]
     leader: str | None
     etcd_quorum: str | None = None
+    etcd_members: list[EtcdMemberRead] = []
+    dcs: DcsStatusRead | None = None
     max_lag_bytes: int | None = None
     switchover_total: int = 0
     expected_nodes: int = 0

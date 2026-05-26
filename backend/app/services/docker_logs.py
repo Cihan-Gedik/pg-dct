@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import re
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from typing import Literal
 
 LogSource = Literal["patroni", "postgres", "etcd", "os"]
@@ -53,12 +54,59 @@ def classify_level(line: str) -> LogLevel:
     return "info"
 
 
+_JOURNAL_ISO_PREFIX = re.compile(
+    r"^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{4}|[+-]\d{2}:\d{2}))\s+",
+)
+
+
+def normalize_log_timestamp(raw: str) -> str:
+    """Extract a parseable ISO prefix from journal / API timestamp strings."""
+    text = (raw or "").strip()
+    if not text:
+        return ""
+    m = _JOURNAL_ISO_PREFIX.match(text + " ") if "T" in text[:20] else None
+    if m:
+        return m.group(1)
+    m2 = re.match(
+        r"^(\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{4}|[+-]\d{2}:\d{2})?)",
+        text,
+    )
+    return m2.group(1) if m2 else text
+
+
+def parse_log_timestamp(raw: str) -> datetime | None:
+    """Parse log line timestamp to UTC; None if unknown."""
+    text = normalize_log_timestamp(raw)
+    if not text:
+        return None
+    if re.search(r"[+-]\d{4}$", text):
+        text = f"{text[:-5]}{text[-5:-2]}:{text[-2:]}"
+    try:
+        dt = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=UTC)
+    return dt.astimezone(UTC)
+
+
+def entry_within_hours(entry: LogEntry, hours: float) -> bool:
+    dt = parse_log_timestamp(entry.ts)
+    if dt is None:
+        return False
+    return dt >= datetime.now(UTC) - timedelta(hours=hours)
+
+
 def parse_journal_line(line: str) -> tuple[str, str]:
     line = line.strip()
     if not line:
         return "", ""
+    # journalctl short-iso on Patroni lab: 2026-05-23T14:02:01+0000 node2 bash[...]: msg
+    iso_host = _JOURNAL_ISO_PREFIX.match(line)
+    if iso_host:
+        return iso_host.group(1), line[iso_host.end() :].strip()
     parts = line.split(" ", 2)
-    if len(parts) >= 3 and parts[0].count("-") >= 2:
+    if len(parts) >= 3 and parts[0].count("-") >= 2 and "T" not in parts[0]:
         return f"{parts[0]} {parts[1]}", parts[2]
     return "", line
 

@@ -3,12 +3,13 @@ import type { LiveMember } from "../api";
 type Props = {
   members: LiveMember[];
   leader: string | null;
+  title?: string;
 };
 
-export function MemberTable({ members, leader }: Props) {
+export function MemberTable({ members, leader, title = "Patroni members" }: Props) {
   return (
     <div className="card member-table-wrap">
-      <h3 className="section-title">Members</h3>
+      <h3 className="section-title">{title}</h3>
       <table>
         <thead>
           <tr>

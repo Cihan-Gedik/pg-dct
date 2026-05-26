@@ -7,8 +7,9 @@ from sqlalchemy.orm import selectinload
 
 from app.db import get_session
 from app.models import Cluster
-from app.schemas import LiveClusterResponse, LiveMemberRead
+from app.schemas import DcsStatusRead, EtcdMemberRead, LiveClusterResponse, LiveMemberRead
 from app.services.cluster_config import load_cluster_docker_hosts
+from app.services.etcd_status import fetch_etcd_cluster_status
 from app.services.live_sync import (
     build_alerts,
     check_docker_hosts_health,
@@ -90,14 +91,54 @@ async def get_live_cluster(
 
     expected = len(docker_hosts) or len(members)
     quorum_ok = active >= (expected // 2 + 1) if expected else bool(active)
-    etcd_quorum = f"{active}/{expected}" if expected else f"{active}/?"
+    patroni_quorum = f"{active}/{expected}" if expected else f"{active}/?"
+
+    leader_host = next((m.host for m in members if m.name == leader), None)
+    failover_candidates = sorted(
+        m.name for m in members if m.role == "replica" and m.state not in ("down", "crashed")
+    )
+
+    preferred_container = next((m.container for m in members if m.name == leader and m.container), None)
+    etcd_raw = (
+        await fetch_etcd_cluster_status(docker_hosts, container_health, preferred_container)
+        if docker_hosts
+        else None
+    )
+
+    etcd_members: list[EtcdMemberRead] = []
+    etcd_quorum = patroni_quorum
+    dcs: DcsStatusRead | None = None
+
+    if etcd_raw:
+        etcd_members = [EtcdMemberRead(**row) for row in etcd_raw["members"]]
+        etcd_quorum = str(etcd_raw["quorum"])
+        if etcd_raw["healthy_count"] < (etcd_raw["total_count"] // 2 + 1):
+            etcd_quorum = f"{etcd_quorum} (degraded)"
+        dcs = DcsStatusRead(
+            patroni_leader=leader,
+            patroni_leader_host=leader_host,
+            failover_candidates=failover_candidates,
+            etcd_raft_leader=etcd_raw.get("leader_name"),
+            etcd_raft_leader_id=etcd_raw.get("leader_id"),
+            etcd_cluster_id=etcd_raw.get("cluster_id"),
+            etcd_raft_term=etcd_raw.get("raft_term"),
+        )
+    else:
+        dcs = DcsStatusRead(
+            patroni_leader=leader,
+            patroni_leader_host=leader_host,
+            failover_candidates=failover_candidates,
+        )
+        etcd_quorum = patroni_quorum if quorum_ok else f"{patroni_quorum} (degraded)"
 
     return LiveClusterResponse(
         cluster_id=cluster.id,
         scope=scope or cluster.patroni_scope,
         members=members,
         leader=leader,
-        etcd_quorum=etcd_quorum if quorum_ok else f"{etcd_quorum} (degraded)",
+        etcd_quorum=etcd_quorum,
+        etcd_members=etcd_members,
+        dcs=dcs,
         max_lag_bytes=max_lag,
         switchover_total=switchover_total,
         expected_nodes=expected,

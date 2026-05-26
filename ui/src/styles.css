@@ -240,6 +240,28 @@ th { color: #64748b; font-size: 11px; text-transform: uppercase; }
 .node-card-host { font-size: 12px; color: #94a3b8; margin: 8px 0; font-family: ui-monospace, monospace; }
 .node-card-foot { display: flex; justify-content: space-between; font-size: 12px; }
 .member-table-wrap .row-leader { background: rgba(37, 99, 235, 0.08); }
+.dcs-health-panel { margin-bottom: 16px; }
+.dcs-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px 24px;
+}
+.dcs-summary-block h4 {
+  margin: 0 0 10px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.dcs-kv { margin: 0; display: flex; flex-direction: column; gap: 10px; }
+.dcs-kv > div { display: grid; grid-template-columns: minmax(120px, 38%) 1fr; gap: 8px; align-items: baseline; }
+.dcs-kv dt { margin: 0; font-size: 12px; color: #94a3b8; }
+.dcs-kv dd { margin: 0; font-size: 13px; }
+.dcs-kv-meta { color: #94a3b8; font-size: 12px; font-family: ui-monospace, monospace; }
+.dcs-candidate-list { color: #e2e8f0; }
+.dcs-note-warn { margin: 12px 0 0; font-size: 12px; }
+.mono-sm { font-family: ui-monospace, monospace; font-size: 11px; word-break: break-all; }
 .log-section { margin-top: 24px; padding-top: 8px; border-top: 1px solid #334155; }
 .dashboard-toolbar {
   display: flex;
@@ -1157,6 +1179,17 @@ td.num.warning { color: #fbbf24; }
 .incident-item.critical { border-left: 3px solid #ef4444; }
 .incident-item.warning { border-left: 3px solid #f59e0b; }
 
+.incident-mini-range-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.incident-mini-window { font-size: 10px; margin: 0; }
+.incident-mini-range { margin-left: auto; }
+
 .incident-mini.incident-mini-split {
   display: grid;
   grid-template-rows: auto auto 1fr;
@@ -1325,6 +1358,13 @@ td.num.warning { color: #fbbf24; }
 }
 
 /* Reference topology map — circular nodes + curved legs */
+.topo-empty {
+  margin: 0;
+  padding: 12px;
+  font-size: 12px;
+  text-align: center;
+}
+
 .topo-ref.topo-ref-round.topo-ref-svg-only {
   position: relative;
   min-height: 0;

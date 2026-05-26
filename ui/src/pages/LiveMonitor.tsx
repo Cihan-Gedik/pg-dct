@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { api, type ClusterListItem, type ClusterTimeline, type LiveCluster, type LogEntry } from "../api";
+import { api, type ClusterListItem, type LiveCluster, type LogEntry } from "../api";
 import { ClusterSelector } from "../components/ClusterSelector";
+import { DcsHealthPanel } from "../components/DcsHealthPanel";
+import { EtcdMemberTable } from "../components/EtcdMemberTable";
 import { MemberTable } from "../components/MemberTable";
-import { RoleTimeline } from "../components/RoleTimeline";
 import { LogFiltersBar, LogStreamPanel } from "../components/LogStream";
 import { useLogFilters } from "../hooks/useLogFilters";
 
@@ -24,10 +25,6 @@ export default function LiveMonitor() {
   const [lastLiveRefresh, setLastLiveRefresh] = useState<Date | null>(null);
   const [lastLogRefresh, setLastLogRefresh] = useState<Date | null>(null);
   const [paused, setPaused] = useState(false);
-  const [timeline, setTimeline] = useState<ClusterTimeline | null>(null);
-  const [timelineHours, setTimelineHours] = useState(168);
-  const [loadingTimeline, setLoadingTimeline] = useState(false);
-  const [timelineErr, setTimelineErr] = useState<string | null>(null);
 
   const initial = searchParams.get("cluster") || "lc-pg-main";
   const filters = useLogFilters(initial);
@@ -67,19 +64,6 @@ export default function LiveMonitor() {
     setSearchParams(next, { replace: true });
   };
 
-  const refreshTimeline = useCallback(async () => {
-    if (!filters.clusterId) return;
-    setLoadingTimeline(true);
-    setTimelineErr(null);
-    try {
-      setTimeline(await api.timeline(filters.clusterId, timelineHours));
-    } catch (e) {
-      setTimelineErr(String(e));
-    } finally {
-      setLoadingTimeline(false);
-    }
-  }, [filters.clusterId, timelineHours]);
-
   const refreshLive = useCallback(async () => {
     if (!filters.clusterId) return;
     setLoadingLive(true);
@@ -113,17 +97,12 @@ export default function LiveMonitor() {
   }, [filters.clusterId, filters.params]);
 
   const refreshAll = useCallback(async () => {
-    await Promise.all([refreshLive(), refreshTimeline(), refreshLogs()]);
-  }, [refreshLive, refreshTimeline, refreshLogs]);
+    await Promise.all([refreshLive(), refreshLogs()]);
+  }, [refreshLive, refreshLogs]);
 
   useEffect(() => {
     refreshLive();
-    refreshTimeline();
   }, [filters.clusterId]);
-
-  useEffect(() => {
-    refreshTimeline();
-  }, [timelineHours, refreshTimeline]);
 
   useEffect(() => {
     if (tab === "logs") refreshLogs();
@@ -133,11 +112,10 @@ export default function LiveMonitor() {
     if (paused) return;
     const t = setInterval(() => {
       refreshLive();
-      if (tab === "overview") refreshTimeline();
       if (tab === "logs") refreshLogs();
     }, 5000);
     return () => clearInterval(t);
-  }, [paused, tab, refreshLive, refreshTimeline, refreshLogs]);
+  }, [paused, tab, refreshLive, refreshLogs]);
 
   const leaderMember = live?.members.find((m) => m.role === "leader");
 
@@ -238,15 +216,14 @@ export default function LiveMonitor() {
                 </div>
               </div>
 
-              <RoleTimeline
-                data={timeline}
-                loading={loadingTimeline}
-                hours={timelineHours}
-                onHoursChange={setTimelineHours}
-                error={timelineErr}
-              />
+              <DcsHealthPanel live={live} dcs={live.dcs} />
 
-              <MemberTable members={live.members} leader={live.leader} />
+              <MemberTable members={live.members} leader={live.leader} title="Patroni members" />
+
+              <EtcdMemberTable
+                members={live.etcd_members ?? []}
+                leaderName={live.dcs?.etcd_raft_leader}
+              />
             </>
           )}
         </section>

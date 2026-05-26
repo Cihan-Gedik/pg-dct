@@ -25,8 +25,29 @@ type ClusterSnapshot = {
 };
 
 function parseTimeMs(v: string): number {
-  const t = Date.parse(v);
+  const trimmed = v.trim();
+  const m = trimmed.match(
+    /^(\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?)/,
+  );
+  let raw = m ? m[1] : trimmed;
+  raw = raw.replace(/([+-])(\d{2})(\d{2})$/, "$1$2:$3");
+  const t = Date.parse(raw);
   return Number.isFinite(t) ? t : 0;
+}
+
+function issueInWindow(issue: DashboardIssue, cutoffMs: number): boolean {
+  if (issue.kind === "cluster" && !issue.ts && !issue.last_seen) return true;
+  const ts = issue.last_seen || issue.ts;
+  if (!ts) return false;
+  const when = parseTimeMs(ts);
+  if (when <= 0) return false;
+  return when >= cutoffMs;
+}
+
+function logInWindow(line: LogEntry, cutoffMs: number): boolean {
+  const when = parseTimeMs(line.ts);
+  if (when <= 0) return false;
+  return when >= cutoffMs;
 }
 
 function classifySnapshot(live: LiveCluster | null): ClusterSnapshot["status"] {
@@ -148,8 +169,7 @@ export default function Dashboard() {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [logsErr, setLogsErr] = useState<string | null>(null);
   const [issues, setIssues] = useState<DashboardIssue[]>([]);
-  const [criticalCount, setCriticalCount] = useState(0);
-  const [warningCount, setWarningCount] = useState(0);
+  const [incidentHours, setIncidentHours] = useState(24);
   const [loading, setLoading] = useState(false);
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
   const [collapsedPanels, setCollapsedPanels] = useState<Record<PanelId, boolean>>({
@@ -165,14 +185,12 @@ export default function Dashboard() {
 
   const refreshIssues = useCallback(async () => {
     try {
-      const data = await api.dashboardIssues();
+      const data = await api.dashboardIssues(incidentHours);
       setIssues(data.issues);
-      setCriticalCount(data.critical_count);
-      setWarningCount(data.warning_count);
     } catch {
       /* optional */
     }
-  }, []);
+  }, [incidentHours]);
 
   const refreshClusterMatrix = useCallback(async (clusterList: ClusterListItem[]) => {
     const entries = await Promise.all(
@@ -223,12 +241,13 @@ export default function Dashboard() {
       params.set("etcd", "include");
       params.set("os", "errors");
       params.set("lines", "2000");
+      params.set("hours", String(incidentHours));
       setLogs((await api.logs(clusterId, params)).lines);
     } catch (e) {
       setLogsErr(String(e));
       setLogs([]);
     }
-  }, [timelineHours]);
+  }, [timelineHours, incidentHours]);
 
   const refreshAll = useCallback(async () => {
     setLoading(true);
@@ -253,9 +272,13 @@ export default function Dashboard() {
   }, [refreshAll]);
 
   useEffect(() => {
+    void refreshIssues();
+  }, [incidentHours, refreshIssues]);
+
+  useEffect(() => {
     if (!selectedClusterId) return;
     void refreshSelectedCluster(selectedClusterId);
-  }, [selectedClusterId, timelineHours, refreshSelectedCluster]);
+  }, [selectedClusterId, timelineHours, incidentHours, refreshSelectedCluster]);
 
   const filteredClusters = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -264,9 +287,17 @@ export default function Dashboard() {
   }, [clusters, search]);
 
   const selectedLive = snapshots[selectedClusterId]?.live ?? null;
+  const incidentCutoffMs = useMemo(
+    () => Date.now() - incidentHours * 3_600_000,
+    [incidentHours, lastRefresh],
+  );
+
   const selectedIssues = useMemo(
-    () => issues.filter((i) => i.cluster_id === selectedClusterId).slice(0, 10),
-    [issues, selectedClusterId],
+    () =>
+      issues
+        .filter((i) => i.cluster_id === selectedClusterId && issueInWindow(i, incidentCutoffMs))
+        .slice(0, 10),
+    [issues, selectedClusterId, incidentCutoffMs],
   );
   const walSeries = useMemo(() => buildWalSeries(logs, 12), [logs]);
   const walMax = useMemo(() => Math.max(1, ...walSeries.map((r) => r.wal)), [walSeries]);
@@ -274,12 +305,28 @@ export default function Dashboard() {
   const clusterChi = useMemo(() => clusterHealthIndex(selectedLive), [selectedLive]);
   const etcdChi = useMemo(() => dcsHealthIndex(selectedLive), [selectedLive]);
   const incidentFeed = useMemo(
-    () => logs.filter((l) => l.level === "critical" || l.level === "warning").slice(0, 8),
-    [logs],
+    () =>
+      logs
+        .filter(
+          (l) =>
+            (l.level === "critical" || l.level === "warning") && logInWindow(l, incidentCutoffMs),
+        )
+        .slice(0, 8),
+    [logs, incidentCutoffMs],
   );
 
   const leader = selectedLive?.members.find((m) => String(m.role).toLowerCase().includes("leader"));
-  const replicas = (selectedLive?.members ?? []).filter((m) => m !== leader);
+  const replicas = useMemo(
+    () =>
+      (selectedLive?.members ?? [])
+        .filter((m) => !String(m.role).toLowerCase().includes("leader"))
+        .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true })),
+    [selectedLive],
+  );
+  const laggingReplicas = useMemo(
+    () => replicas.filter((r) => (r.lag ?? 0) > 8 * 1024 * 1024),
+    [replicas],
+  );
 
   const expandAllPanels = () => {
     setCollapsedPanels({
@@ -400,8 +447,8 @@ export default function Dashboard() {
         return (
           <IncidentFeedMini
             clusterId={selectedClusterId}
-            criticalCount={criticalCount}
-            warningCount={warningCount}
+            hours={incidentHours}
+            onHoursChange={setIncidentHours}
             issues={selectedIssues}
             logLines={incidentFeed}
           />
@@ -409,9 +456,10 @@ export default function Dashboard() {
       case "notes":
         return (
           <div className="ref-notes-strip">
-            {replicas.some((r) => (r.lag ?? 0) > 8 * 1024 * 1024) ? (
+            {laggingReplicas.length > 0 ? (
               <p>
-                <span className="ref-notes-warn">R3 Lagging:</span> Pending Restart required.
+                <span className="ref-notes-warn">Replica lag:</span>{" "}
+                {laggingReplicas.map((r) => r.name).join(", ")} — check replication / pending restart.
               </p>
             ) : selectedLive?.alerts?.length ? (
               <p>
