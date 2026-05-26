@@ -50,7 +50,25 @@ chmod +x scripts/register-docker-clusters.sh
 
 Or browser: http://127.0.0.1:8080/ui/ then click **Bootstrap Docker clusters**
 
-## 4. Git pull (optional)
+## 4. pgBackRest (Backup UI)
+
+Containers do not ship pgBackRest; install once per lab cluster (shared repo on `/nfs`):
+
+```bash
+chmod +x scripts/install-pgbackrest-lab.sh
+./scripts/install-pgbackrest-lab.sh vanilla
+# ./scripts/install-pgbackrest-lab.sh main
+```
+
+Then enable the stanza in `config/docker-clusters.yaml` (see `lc-pg-vanilla` example) and open **Backup** in the UI.
+
+Verify:
+
+```bash
+docker exec -u postgres logcollector-dev-cihangedik-node0 pgbackrest --stanza=lc-pg-vanilla info
+```
+
+## 5. Git pull (optional)
 
 ```bash
 cd ~/Downloads/pg-dct
