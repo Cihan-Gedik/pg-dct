@@ -1,5 +1,3 @@
-import json
-
 from app.services.etcd_status import (
     build_etcd_members,
     parse_etcd_endpoint_status,
@@ -59,7 +57,6 @@ def test_parse_etcd_endpoint_status_leader() -> None:
 
 def test_build_etcd_members_roles() -> None:
     rows = parse_etcd_member_list(MEMBER_LIST)
-    member_by_id = {r["member_id"]: r for r in rows}
     leader_id = f"{1276515949825239588:x}"
     health = {r["member_id"]: "up" for r in rows}
     docker_hosts = {"172.18.0.3": "node1", "172.18.0.2": "node0"}

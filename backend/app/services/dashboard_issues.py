@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import re
-from datetime import UTC, datetime
 from typing import Literal
 
 from sqlalchemy import select
@@ -161,7 +160,7 @@ async def collect_issues_for_cluster(cluster: Cluster) -> list[dict]:
                     "member_name": name,
                     "host": host,
                     "source": "patroni",
-                    "title": f"Node not in Patroni cluster",
+                    "title": "Node not in Patroni cluster",
                     "message": f"{name} ({host}) is unreachable or not reporting to Patroni.",
                     "ts": None,
                     "detail": "Check container and run scripts/heal-lab-node.sh if etcd/patroni are stopped.",

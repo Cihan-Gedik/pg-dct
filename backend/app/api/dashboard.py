@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_session
 from app.schemas import DashboardIssueRead, DashboardIssuesResponse
-from app.services.dashboard_issues import collect_all_issues, sort_issues
+from app.services.dashboard_issues import collect_all_issues
 from app.services.docker_logs import parse_log_timestamp
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])

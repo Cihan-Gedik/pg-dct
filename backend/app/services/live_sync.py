@@ -8,7 +8,6 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Cluster, Node
-from app.services.cluster_config import load_cluster_docker_hosts
 from app.services.patroni import member_to_node_fields
 
 
