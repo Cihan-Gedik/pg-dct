@@ -24,3 +24,13 @@ clusters:
       "172.19.0.2": logcollector-dev-cihangedik-node0
       "172.19.0.3": logcollector-dev-cihangedik-node1
       "172.19.0.4": logcollector-dev-cihangedik-node2
+
+  - id: bc-pg-main
+    name: bc-pg-main
+    patroni_scope: bc-pg-main
+    patroni_seed_url: http://127.0.0.1:20080
+    poll_interval_sec: 5
+    docker_hosts:
+      "172.20.0.2": bundlecollect-cihangedik-node0
+      "172.20.0.3": bundlecollect-cihangedik-node1
+      "172.20.0.4": bundlecollect-cihangedik-node2

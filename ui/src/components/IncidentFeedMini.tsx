@@ -71,7 +71,7 @@ export function IncidentFeedMini({ clusterId, hours, onHoursChange, issues, logL
           ? "warning"
           : "critical,warning,info";
     const q = new URLSearchParams({ cluster: clusterId || "lc-pg-main", severity });
-    navigate(`/logs?${q.toString()}`);
+    navigate(`/live-logs?${q.toString()}`);
   };
 
   return (

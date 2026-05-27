@@ -14,7 +14,6 @@ export default function LetsCheckLogs() {
   const [err, setErr] = useState<string | null>(null);
   const [peerNoiseFiltered, setPeerNoiseFiltered] = useState(0);
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
-  const [bundleId, setBundleId] = useState("live");
   const [nodes, setNodes] = useState<string[]>([]);
 
   const initial = searchParams.get("cluster") || "lc-pg-main";
@@ -32,7 +31,7 @@ export default function LetsCheckLogs() {
   const onClusterChange = useCallback(
     (id: string) => {
       filters.setClusterId(id);
-      navigate(`/logs?cluster=${encodeURIComponent(id)}`, { replace: true });
+      navigate(`/live-logs?cluster=${encodeURIComponent(id)}`, { replace: true });
     },
     [filters, navigate],
   );
@@ -66,7 +65,7 @@ export default function LetsCheckLogs() {
     <>
       <header className="page-header">
         <div>
-          <h1>Lets Check Logs</h1>
+          <h1>Live Logs</h1>
           <p className="sub">Deep log view for cluster {filters.clusterId}</p>
         </div>
         <button type="button" className="btn primary" disabled={loading} onClick={refresh}>
@@ -100,16 +99,13 @@ export default function LetsCheckLogs() {
         suppressPeerNoise={filters.suppressPeerNoise}
         setSuppressPeerNoise={filters.setSuppressPeerNoise}
         onApplyPreset={filters.applyPreset}
-        showBundle
-        bundleId={bundleId}
-        setBundleId={setBundleId}
       />
 
       <LogStreamPanel
         lines={logs}
         loading={loading}
         error={err}
-        mode="archive"
+        mode="live"
         lastRefresh={lastRefresh}
         peerNoiseFiltered={peerNoiseFiltered}
         onRefresh={refresh}

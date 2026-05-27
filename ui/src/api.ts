@@ -146,6 +146,47 @@ export type PostgresSetting = {
   unit: string | null;
 };
 
+export type BundleListItem = {
+  id: string;
+  cluster_id: string;
+  cluster_name: string;
+  customer_name: string;
+  created_at: string;
+  line_count: number;
+  node_count: number;
+  has_archive: boolean;
+  log_time_start?: string | null;
+  log_time_end?: string | null;
+};
+
+export type CustomerListItem = {
+  name: string;
+  bundle_count: number;
+  latest_bundle_id: string | null;
+  latest_cluster_id: string | null;
+};
+
+export type BundleCollectResult = {
+  ok: boolean;
+  bundle_id: string;
+  cluster_id: string;
+  line_count: number;
+  path?: string | null;
+  archive_path?: string | null;
+};
+
+export type BundleImportResult = {
+  ok: boolean;
+  bundle_id: string;
+  cluster_id: string;
+  cluster_name: string;
+  customer_name: string;
+  line_count: number;
+  log_time_start?: string | null;
+  log_time_end?: string | null;
+  message: string;
+};
+
 export type PostgresSettings = {
   cluster_id: string;
   ok: boolean;
@@ -213,6 +254,35 @@ export const api = {
     return request<{ count: number; lines: LogEntry[]; peer_noise_filtered?: number; fetched_at?: string }>(
       `/api/v1/clusters/${id}/logs?${q}`,
     );
+  },
+  listCustomers: () => request<CustomerListItem[]>("/api/v1/bundles/customers"),
+  listBundles: (opts?: { clusterId?: string; customerName?: string }) => {
+    const q = new URLSearchParams();
+    if (opts?.clusterId) q.set("cluster_id", opts.clusterId);
+    if (opts?.customerName) q.set("customer_name", opts.customerName);
+    const qs = q.toString();
+    return request<BundleListItem[]>(`/api/v1/bundles${qs ? `?${qs}` : ""}`);
+  },
+  collectBundle: (clusterId: string, lines = 500) =>
+    request<BundleCollectResult>(
+      `/api/v1/clusters/${clusterId}/bundles/collect?lines=${lines}`,
+      { method: "POST" },
+    ),
+  bundleLogs: (bundleId: string, params: URLSearchParams) => {
+    const q = new URLSearchParams(params);
+    return request<{ count: number; lines: LogEntry[]; peer_noise_filtered?: number; fetched_at?: string }>(
+      `/api/v1/bundles/${encodeURIComponent(bundleId)}/logs?${q}`,
+    );
+  },
+  bundleArchiveUrl: (bundleId: string) =>
+    `/api/v1/bundles/${encodeURIComponent(bundleId)}/archive`,
+  importBundle: (file: File, customerName: string, clusterName?: string, clusterId?: string) => {
+    const form = new FormData();
+    form.append("file", file);
+    form.append("customer_name", customerName);
+    if (clusterName) form.append("cluster_name", clusterName);
+    if (clusterId) form.append("cluster_id", clusterId);
+    return request<BundleImportResult>("/api/v1/bundles/import", { method: "POST", body: form });
   },
   backupInfo: (id: string) => request<BackupInfo>(`/api/v1/clusters/${id}/backup/info`),
   backupJobs: (id: string) => request<BackupJob[]>(`/api/v1/clusters/${id}/backup/jobs`),

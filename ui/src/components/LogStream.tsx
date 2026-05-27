@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import type { LogEntry } from "../api";
+import type { BundleListItem, LogEntry } from "../api";
 
 export type LogFilters = {
   clusterId: string;
@@ -124,7 +124,9 @@ type FilterBarProps = {
   onApplyPreset: (p: "all" | "etcd" | "patroni" | "errors") => void;
   bundleId?: string;
   setBundleId?: (v: string) => void;
+  bundleOptions?: BundleListItem[];
   showBundle?: boolean;
+  includeLiveBundleOption?: boolean;
 };
 
 export function LogFiltersBar({
@@ -151,7 +153,9 @@ export function LogFiltersBar({
   onApplyPreset,
   bundleId,
   setBundleId,
+  bundleOptions = [],
   showBundle,
+  includeLiveBundleOption = true,
 }: FilterBarProps) {
   const srcOpts = (
     <>
@@ -193,8 +197,12 @@ export function LogFiltersBar({
           <div className="field">
             <label>Bundle</label>
             <select value={bundleId} onChange={(e) => setBundleId(e.target.value)}>
-              <option value="live">Live tail</option>
-              <option value="bnd-local">Local snapshot</option>
+              {includeLiveBundleOption && <option value="live">Live tail</option>}
+              {bundleOptions.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.id} ({b.line_count} lines)
+                </option>
+              ))}
             </select>
           </div>
         )}

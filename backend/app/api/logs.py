@@ -14,37 +14,13 @@ from app.services.docker_logs import (
     fetch_cluster_logs,
     suppress_etcd_peer_noise,
 )
+from app.services.logs_filter import filter_log_entries
 from app.services.patroni import PatroniDiscoveryError, fetch_cluster_members
 
 router = APIRouter(prefix="/clusters", tags=["logs"])
 
 ALL_SOURCES: list[LogSource] = ["patroni", "postgres", "etcd", "os"]
 ALL_LEVELS: list[LogLevel] = ["critical", "warning", "info"]
-
-
-def _filter_logs(
-    lines: list,
-    node: str | None,
-    levels: list[LogLevel],
-    sources: dict[LogSource, str],
-    search: str | None,
-) -> list:
-    q = (search or "").strip().lower()
-    out = []
-    for entry in lines:
-        if node and node != "all" and entry.node != node and entry.member_name != node:
-            continue
-        if entry.level not in levels:
-            continue
-        mode = sources.get(entry.source, "include")
-        if mode == "exclude":
-            continue
-        if mode == "errors" and entry.level not in ("critical", "warning"):
-            continue
-        if q and q not in f"{entry.ts} {entry.node} {entry.source} {entry.level} {entry.message}".lower():
-            continue
-        out.append(entry)
-    return out
 
 
 @router.get("/{cluster_id}/logs", response_model=LogsResponse)
@@ -115,7 +91,7 @@ async def get_cluster_logs(
         before = len(raw)
         raw = suppress_etcd_peer_noise(raw, down_hosts)
         peer_filtered = before - len(raw)
-    filtered = _filter_logs(raw, node, levels, source_modes, search)
+    filtered = filter_log_entries(raw, node, levels, source_modes, search)
     if hours is not None:
         filtered = [e for e in filtered if entry_within_hours(e, hours)]
 

@@ -1,0 +1,21 @@
+# Copy to config.yaml and edit for the customer cluster.
+# Run: python3 collect.py -c config.yaml
+
+# Optional label embedded in the bundle (imported cluster name can be set again in PG-DCT UI)
+cluster_label: customer-prod
+
+# Optional Patroni REST API (leader reachable from this host)
+patroni_url: http://127.0.0.1:8008
+
+lines_per_source: 500
+
+# Map Patroni member IP/host -> docker container name on this machine
+docker_hosts:
+  "172.20.0.2": bundlecollect-cihangedik-node0
+  "172.20.0.3": bundlecollect-cihangedik-node1
+  "172.20.0.4": bundlecollect-cihangedik-node2
+
+# Optional explicit member names (defaults to container name)
+# nodes:
+#   - host: "172.20.0.2"
+#     member_name: bc-pg-main-0

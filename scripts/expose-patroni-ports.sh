@@ -5,11 +5,14 @@ set -euo pipefail
 
 MAIN_NET="logcollector-cihangedik-anydbver"
 DEV_NET="logcollector-dev-cihangedik-anydbver"
+BC_NET="bundlecollect-cihangedik-anydbver"
 # Defaults; after switchover the leader IP moves — detect_leader_target updates these.
 MAIN_TARGET="${PGDCT_MAIN_TARGET:-172.18.0.2:8008}"
 DEV_TARGET="${PGDCT_DEV_TARGET:-172.19.0.2:8008}"
+BC_TARGET="${PGDCT_BC_TARGET:-172.20.0.2:8008}"
 MAIN_PORT="${PGDCT_MAIN_PORT:-18080}"
 DEV_PORT="${PGDCT_DEV_PORT:-19080}"
+BC_PORT="${PGDCT_BC_PORT:-20080}"
 
 # Pick Patroni :8008 on the current leader (switchover-safe for host proxy).
 detect_leader_target() {
@@ -68,11 +71,25 @@ if [[ -n "$detected" ]]; then
 else
   echo "Vanilla cluster leader: $DEV_TARGET (default)"
 fi
+bc_detected=""
+for c in bundlecollect-cihangedik-node0 bundlecollect-cihangedik-node1 bundlecollect-cihangedik-node2; do
+  if bc_detected="$(detect_leader_target "$c")" && [[ -n "$bc_detected" ]]; then
+    break
+  fi
+done
+if [[ -n "$bc_detected" ]]; then
+  BC_TARGET="$bc_detected"
+  echo "Bundlecollect cluster leader: $BC_TARGET"
+else
+  echo "Bundlecollect cluster leader: $BC_TARGET (default)"
+fi
 start_proxy "pgdct-patroni-main" "$MAIN_NET" "$MAIN_PORT" "$MAIN_TARGET"
 start_proxy "pgdct-patroni-vanilla" "$DEV_NET" "$DEV_PORT" "$DEV_TARGET"
+start_proxy "pgdct-patroni-bundlecollect" "$BC_NET" "$BC_PORT" "$BC_TARGET"
 echo ""
 echo "Test:"
 echo "  curl -s http://127.0.0.1:${MAIN_PORT}/cluster | head"
 echo "  curl -s http://127.0.0.1:${DEV_PORT}/cluster | head"
+echo "  curl -s http://127.0.0.1:${BC_PORT}/cluster | head"
 echo ""
 echo "Update seed URLs in config/docker-clusters.yaml to these localhost ports."

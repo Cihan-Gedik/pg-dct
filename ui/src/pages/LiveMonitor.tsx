@@ -161,7 +161,7 @@ export default function LiveMonitor() {
           Logs
           <span className="tab-meta"> · {logs.length} lines</span>
         </button>
-        <Link className="tab-link" to={`/logs?cluster=${filters.clusterId}`}>
+        <Link className="tab-link" to={`/live-logs?cluster=${filters.clusterId}`}>
           Open full log view →
         </Link>
       </nav>

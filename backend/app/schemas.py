@@ -79,6 +79,61 @@ class LogsResponse(BaseModel):
     fetched_at: datetime
 
 
+class BundleListItem(BaseModel):
+    id: str
+    cluster_id: str
+    cluster_name: str
+    customer_name: str = ""
+    created_at: str
+    line_count: int
+    node_count: int
+    has_archive: bool = False
+    log_time_start: str | None = None
+    log_time_end: str | None = None
+
+
+class CustomerListItem(BaseModel):
+    name: str
+    bundle_count: int
+    latest_bundle_id: str | None = None
+    latest_cluster_id: str | None = None
+
+
+class BundleDetail(BaseModel):
+    id: str
+    cluster_id: str
+    cluster_name: str
+    customer_name: str = ""
+    created_at: str
+    line_count: int
+    lines_per_source: int
+    sources: list[str]
+    nodes: list[dict]
+    patroni_snapshot: object | None = None
+    has_archive: bool = False
+
+
+class BundleCollectResponse(BaseModel):
+    ok: bool
+    bundle_id: str
+    cluster_id: str
+    line_count: int
+    path: str | None = None
+    archive_path: str | None = None
+
+
+class BundleImportResponse(BaseModel):
+    ok: bool
+    bundle_id: str
+    cluster_id: str
+    cluster_name: str
+    customer_name: str
+    line_count: int
+    log_time_start: str | None = None
+    log_time_end: str | None = None
+    message: str
+
+
 class LiveMemberRead(BaseModel):
     name: str
     host: str

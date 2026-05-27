@@ -4,7 +4,8 @@ const links = [
   { to: "/", label: "Dashboard" },
   { to: "/live", label: "Live Monitor" },
   { to: "/backup", label: "Backup" },
-  { to: "/logs", label: "Lets Check Logs" },
+  { to: "/live-logs", label: "Live Logs" },
+  { to: "/bundle-logs", label: "Bundle Logs" },
   { to: "/bundles", label: "Bundles" },
   { to: "/settings", label: "Settings" },
 ];

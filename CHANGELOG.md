@@ -15,6 +15,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.3.0] - 2026-05-27
+
+[Compare v0.2.1...v0.3.0](https://github.com/Cihan-Gedik/pg-dct/compare/v0.2.1...v0.3.0)
+
+### Added
+
+- **Customer bundle collector package:** `tools/bundle-collector` now supports environment discovery (Docker Patroni clusters and local PostgreSQL) and exports portable `bundle_*.tar.gz` archives for remote customer troubleshooting.
+- **Bundle import API:** Added bundle import endpoints with customer metadata and reusable archive storage (`/api/v1/bundles/import`, `/api/v1/bundles/customers`, `/api/v1/bundles/*`).
+- **Bundle workflows in UI:** Bundles page now supports customer-tagged imports, customer list management, and bundle-driven log analysis flow.
+
+### Changed
+
+- **Navigation split:** Log viewing is separated into **Live Logs** and **Bundle Logs** routes so live telemetry and imported archives are isolated by design.
+- **Bundle Logs behavior:** Screen shows only imported customer data; if no customer is selected, the view stays intentionally empty.
+
+### Fixed
+
+- Removed stale test/import placeholder customer records and cleaned bundle-log routing so live data no longer leaks into bundle-only flows.
+
+---
+
 ## [0.2.1] - 2026-05-26
 
 [Compare v0.2.0...v0.2.1](https://github.com/Cihan-Gedik/pg-dct/compare/v0.2.0...v0.2.1)
@@ -57,4 +78,5 @@ Initial toolkit: React UI, Live Monitor, log streaming, Docker lab bootstrap, Ba
 
 [0.2.1]: https://github.com/Cihan-Gedik/pg-dct/releases/tag/v0.2.1
 [0.2.0]: https://github.com/Cihan-Gedik/pg-dct/releases/tag/v0.2.0
-[Unreleased]: https://github.com/Cihan-Gedik/pg-dct/compare/v0.2.1...HEAD
+[0.3.0]: https://github.com/Cihan-Gedik/pg-dct/releases/tag/v0.3.0
+[Unreleased]: https://github.com/Cihan-Gedik/pg-dct/compare/v0.3.0...HEAD

@@ -14,6 +14,7 @@ from app.api.live import router as live_router
 from app.api.logs import router as logs_router
 from app.api.timeline import router as timeline_router
 from app.api.backups import router as backups_router
+from app.api.bundles import router as bundles_router
 from app.config import settings
 from app.db import SessionLocal, init_db
 from app.services.bootstrap import bootstrap_clusters, default_clusters_path
@@ -35,7 +36,7 @@ async def lifespan(_app: FastAPI):
 app = FastAPI(
     title="PG-DCT API",
     description="Database control toolkit — Patroni troubleshooting and future multi-DB tasks",
-    version="0.1.0",
+    version="0.3.0",
     lifespan=lifespan,
 )
 
@@ -54,6 +55,7 @@ app.include_router(live_router, prefix="/api/v1")
 app.include_router(logs_router, prefix="/api/v1")
 app.include_router(timeline_router, prefix="/api/v1")
 app.include_router(backups_router, prefix="/api/v1")
+app.include_router(bundles_router, prefix="/api/v1")
 
 
 def _favicon_response() -> FileResponse:

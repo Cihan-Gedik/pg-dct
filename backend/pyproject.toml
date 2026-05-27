@@ -1,6 +1,6 @@
 [project]
 name = "pg-dct-api"
-version = "0.2.1"
+version = "0.3.0"
 description = "PG-DCT API — database control and troubleshooting"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -13,6 +13,7 @@ dependencies = [
   "pydantic>=2.10.0",
   "pydantic-settings>=2.6.0",
   "pyyaml>=6.0.2",
+  "python-multipart>=0.0.12",
 ]
 
 [project.optional-dependencies]

@@ -1,4 +1,4 @@
-.PHONY: install up down logs test smoke dev clean bootstrap-docker release-notes
+.PHONY: install up down logs test smoke dev clean bootstrap-docker release-notes bundle-collector-dist
 
 PORT ?= 8080
 
@@ -49,6 +49,14 @@ TAG ?= v0.2.1
 release-notes:
 	chmod +x scripts/release-notes.sh
 	./scripts/release-notes.sh "$(PREV)" "$(TAG)"
+
+# Customer-facing bundle collector package (send dist/pgdct-bundle-collector.tar.gz)
+bundle-collector-dist:
+	mkdir -p dist
+	chmod +x tools/bundle-collector/pgdct-bundle-collect.sh tools/bundle-collector/collect.py
+	tar czf dist/pgdct-bundle-collector.tar.gz -C tools/bundle-collector \
+		collect.py discovery.py pgdct-bundle-collect.sh config.example.yaml README.txt
+	@echo "OK  dist/pgdct-bundle-collector.tar.gz"
 
 clean:
 	rm -rf backend/.venv backend/data/*.db backend/.pytest_cache backend/.ruff_cache
