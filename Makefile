@@ -1,4 +1,4 @@
-.PHONY: install up down logs test smoke dev clean bootstrap-docker
+.PHONY: install up down logs test smoke dev clean bootstrap-docker release-notes
 
 PORT ?= 8080
 
@@ -42,6 +42,13 @@ test:
 
 dev:
 	cd backend && . .venv/bin/activate && uvicorn app.main:app --reload --port $(PORT)
+
+# Generate Markdown between two refs: make release-notes PREV=v0.2.0 TAG=v0.2.1
+PREV ?= v0.2.0
+TAG ?= v0.2.1
+release-notes:
+	chmod +x scripts/release-notes.sh
+	./scripts/release-notes.sh "$(PREV)" "$(TAG)"
 
 clean:
 	rm -rf backend/.venv backend/data/*.db backend/.pytest_cache backend/.ruff_cache

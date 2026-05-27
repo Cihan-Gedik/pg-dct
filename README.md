@@ -27,6 +27,8 @@ make smoke
 
 Full guide: [docs/INSTALL.md](docs/INSTALL.md) · Docker lab: [docs/DOCKER-LAB.md](docs/DOCKER-LAB.md)
 
+**Releases:** [CHANGELOG.md](CHANGELOG.md) · [How to read versions & tags](docs/RELEASES.md) · [GitHub Releases](https://github.com/Cihan-Gedik/pg-dct/releases)
+
 ---
 
 ## Make targets
