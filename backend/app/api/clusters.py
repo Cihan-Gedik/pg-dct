@@ -1,4 +1,5 @@
 import json
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
@@ -7,8 +8,17 @@ from sqlalchemy.orm import selectinload
 
 from app.db import get_session
 from app.models import Cluster, Node
-from app.schemas import ClusterCreate, ClusterListItem, ClusterRead, DiscoverResult, NodeRead
+from app.schemas import (
+    ClusterCreate,
+    ClusterListItem,
+    ClusterRead,
+    DiscoverResult,
+    NodeRead,
+    PostgresSettingRead,
+    PostgresSettingsResponse,
+)
 from app.services.patroni import PatroniDiscoveryError, fetch_cluster_members, member_to_node_fields
+from app.services.postgres_settings import fetch_postgres_settings
 
 router = APIRouter(prefix="/clusters", tags=["clusters"])
 
@@ -141,3 +151,27 @@ async def discover_cluster(
 
     nodes = [NodeRead.model_validate(n) for n in cluster.nodes]
     return DiscoverResult(cluster_id=cluster.id, discovered=len(nodes), members=nodes)
+
+
+@router.get("/{cluster_id}/postgres/settings", response_model=PostgresSettingsResponse)
+async def get_postgres_settings(
+    cluster_id: str,
+    session: AsyncSession = Depends(get_session),
+) -> PostgresSettingsResponse:
+    result = await session.execute(select(Cluster).where(Cluster.id == cluster_id))
+    cluster = result.scalar_one_or_none()
+    if not cluster:
+        raise HTTPException(status_code=404, detail="Cluster not found")
+
+    payload = await fetch_postgres_settings(cluster.patroni_seed_url, cluster_id)
+    return PostgresSettingsResponse(
+        cluster_id=cluster.id,
+        ok=bool(payload.get("ok")),
+        error=payload.get("error"),
+        leader=payload.get("leader"),
+        host=payload.get("host"),
+        container=payload.get("container"),
+        version=payload.get("version"),
+        settings=[PostgresSettingRead(**row) for row in payload.get("settings") or []],
+        fetched_at=datetime.now(UTC),
+    )

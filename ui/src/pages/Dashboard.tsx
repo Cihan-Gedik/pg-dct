@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
 import {
   api,
   type ClusterListItem,
@@ -7,10 +6,12 @@ import {
   type DashboardIssue,
   type LiveCluster,
   type LogEntry,
+  type PostgresSettings,
 } from "../api";
 import { DashboardGridPanel } from "../components/DashboardGridPanel";
 import { HealthUptimePanel } from "../components/HealthUptimePanel";
 import { IncidentFeedMini } from "../components/IncidentFeedMini";
+import { PostgresSettingsStrip } from "../components/PostgresSettingsStrip";
 import { RoleTimeline } from "../components/RoleTimeline";
 import { TopologyMap } from "../components/TopologyMap";
 import type { PanelId } from "../lib/dashboardGrid";
@@ -171,6 +172,9 @@ export default function Dashboard() {
   const [issues, setIssues] = useState<DashboardIssue[]>([]);
   const [incidentHours, setIncidentHours] = useState(24);
   const [loading, setLoading] = useState(false);
+  const [pgSettings, setPgSettings] = useState<PostgresSettings | null>(null);
+  const [pgSettingsErr, setPgSettingsErr] = useState<string | null>(null);
+  const [loadingPgSettings, setLoadingPgSettings] = useState(false);
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
   const [collapsedPanels, setCollapsedPanels] = useState<Record<PanelId, boolean>>({
     search: false,
@@ -247,6 +251,16 @@ export default function Dashboard() {
       setLogsErr(String(e));
       setLogs([]);
     }
+    setLoadingPgSettings(true);
+    setPgSettingsErr(null);
+    try {
+      setPgSettings(await api.postgresSettings(clusterId));
+    } catch (e) {
+      setPgSettingsErr(String(e));
+      setPgSettings(null);
+    } finally {
+      setLoadingPgSettings(false);
+    }
   }, [timelineHours, incidentHours]);
 
   const refreshAll = useCallback(async () => {
@@ -315,6 +329,7 @@ export default function Dashboard() {
     [logs, incidentCutoffMs],
   );
 
+  const selectedCluster = clusters.find((c) => c.id === selectedClusterId);
   const leader = selectedLive?.members.find((m) => String(m.role).toLowerCase().includes("leader"));
   const replicas = useMemo(
     () =>
@@ -477,11 +492,10 @@ export default function Dashboard() {
 
   return (
     <div className="ref-dashboard ref-dashboard-fit">
-      <div className="ref-topbar">
-        <div className="ref-tabs">
-          <span className="active">Dashboard</span>
-          <Link to="/logs">Log Analyzer (Bundle Import)</Link>
-          <Link to={`/live?cluster=${selectedClusterId || "lc-pg-main"}`}>Live Monitor</Link>
+      <header className="page-header compact ref-topbar">
+        <div>
+          <h1>Dashboard</h1>
+          <p className="sub">Cluster health, topology, WAL, and incidents</p>
         </div>
         <div className="row header-actions">
           <button type="button" className="btn" onClick={expandAllPanels}>
@@ -491,7 +505,7 @@ export default function Dashboard() {
             {loading ? "Refreshing…" : "Refresh"}
           </button>
         </div>
-      </div>
+      </header>
 
       {err && <div className="err">{err}</div>}
 
@@ -501,6 +515,16 @@ export default function Dashboard() {
         </div>
         <div className="dashboard-search-strip-body">{renderPanelBody("search")}</div>
       </section>
+
+      {selectedClusterId && (
+        <PostgresSettingsStrip
+          clusterId={selectedClusterId}
+          clusterName={selectedCluster?.name}
+          data={pgSettings}
+          loading={loadingPgSettings}
+          error={pgSettingsErr}
+        />
+      )}
 
       <div className="dashboard-stack">
         <div className="dashboard-row dashboard-row-top">

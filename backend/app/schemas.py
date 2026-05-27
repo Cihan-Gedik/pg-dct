@@ -170,6 +170,26 @@ class ClusterTimelineResponse(BaseModel):
     fetched_at: datetime
 
 
+class PostgresSettingRead(BaseModel):
+    name: str
+    label: str
+    value: str
+    raw_setting: str
+    unit: str | None = None
+
+
+class PostgresSettingsResponse(BaseModel):
+    cluster_id: str
+    ok: bool
+    error: str | None = None
+    leader: str | None = None
+    host: str | None = None
+    container: str | None = None
+    version: str | None = None
+    settings: list[PostgresSettingRead] = []
+    fetched_at: datetime
+
+
 class LiveClusterResponse(BaseModel):
     cluster_id: str
     scope: str | None

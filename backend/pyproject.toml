@@ -1,6 +1,6 @@
 [project]
 name = "pg-dct-api"
-version = "0.2.0"
+version = "0.2.1"
 description = "PG-DCT API — database control and troubleshooting"
 readme = "README.md"
 requires-python = ">=3.11"

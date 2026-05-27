@@ -138,6 +138,25 @@ export type BackupJob = {
   error: string | null;
 };
 
+export type PostgresSetting = {
+  name: string;
+  label: string;
+  value: string;
+  raw_setting: string;
+  unit: string | null;
+};
+
+export type PostgresSettings = {
+  cluster_id: string;
+  ok: boolean;
+  error: string | null;
+  leader: string | null;
+  host: string | null;
+  container: string | null;
+  version: string | null;
+  settings: PostgresSetting[];
+};
+
 export type LiveCluster = {
   cluster_id: string;
   scope: string | null;
@@ -184,6 +203,8 @@ export const api = {
   discover: (id: string) => request<unknown>(`/api/v1/clusters/${id}/discover`, { method: "POST" }),
   bootstrapDocker: () => request<unknown>("/api/v1/bootstrap/docker", { method: "POST" }),
   live: (id: string) => request<LiveCluster>(`/api/v1/clusters/${id}/live`),
+  postgresSettings: (id: string) =>
+    request<PostgresSettings>(`/api/v1/clusters/${id}/postgres/settings`),
   timeline: (id: string, hours: number) =>
     request<ClusterTimeline>(`/api/v1/clusters/${id}/timeline?hours=${hours}`),
   logs: (id: string, params: URLSearchParams) => {
