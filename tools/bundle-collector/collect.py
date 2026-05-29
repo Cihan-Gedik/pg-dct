@@ -11,9 +11,11 @@ import argparse
 import json
 import re
 import shutil
+import socket
 import subprocess
 import sys
 import tarfile
+import tempfile
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
@@ -59,6 +61,8 @@ LOCAL_SOURCE_COMMANDS: dict[LogSource, list[str]] = {
     "os": ["journalctl", "-n", "{n}", "--no-pager", "-o", "short-iso"],
 }
 
+_LOCAL_HOST_ALIASES = {"127.0.0.1", "localhost", socket.gethostname(), socket.getfqdn()}
+
 _JOURNAL_ISO_PREFIX = re.compile(
     r"^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{4}|[+-]\d{2}:\d{2}))\s+",
 )
@@ -72,6 +76,24 @@ class LogEntry:
     source: LogSource
     level: LogLevel
     message: str
+
+
+def ask_yes_no(prompt: str, default: bool = True) -> bool:
+    suffix = " [Y/n]: " if default else " [y/N]: "
+    try:
+        raw = input(prompt + suffix).strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        return False
+    if not raw:
+        return default
+    return raw in {"y", "yes"}
+
+
+def ask_text(prompt: str) -> str:
+    try:
+        return input(prompt).strip()
+    except (EOFError, KeyboardInterrupt):
+        return ""
 
 
 def classify_level(line: str) -> LogLevel:
@@ -106,6 +128,21 @@ def docker_exec(container: str, cmd: list[str], timeout: float = 60.0) -> str:
     return run_cmd(["docker", "exec", container, *cmd], timeout=timeout)
 
 
+def ssh_exec(
+    host: str,
+    cmd: list[str],
+    timeout: float = 60.0,
+    known_hosts_file: str | None = None,
+) -> str:
+    opts = ["-o", "BatchMode=yes", "-o", "ConnectTimeout=5"]
+    if known_hosts_file:
+        opts += ["-o", "StrictHostKeyChecking=accept-new", "-o", f"UserKnownHostsFile={known_hosts_file}"]
+    return run_cmd(
+        ["ssh", *opts, host, *cmd],
+        timeout=timeout,
+    )
+
+
 def fetch_source_logs_docker(
     container: str,
     source: LogSource,
@@ -127,6 +164,53 @@ def fetch_source_logs_local(
     template = LOCAL_SOURCE_COMMANDS[source]
     cmd = [part.format(n=lines) if "{n}" in part else part for part in template]
     return _parse_log_output(run_cmd(cmd), source, member_name, node_host)
+
+
+def fetch_source_logs_ssh(
+    ssh_target: str,
+    source: LogSource,
+    lines: int,
+    member_name: str,
+    node_host: str,
+    known_hosts_file: str | None = None,
+) -> list[LogEntry]:
+    template = LOCAL_SOURCE_COMMANDS[source]
+    cmd = [part.format(n=lines) if "{n}" in part else part for part in template]
+    return _parse_log_output(
+        ssh_exec(ssh_target, cmd, known_hosts_file=known_hosts_file),
+        source,
+        member_name,
+        node_host,
+    )
+
+
+def fetch_custom_path_logs_local(
+    source: LogSource,
+    lines: int,
+    member_name: str,
+    node_host: str,
+    custom_path: str,
+) -> list[LogEntry]:
+    cmd = ["bash", "-lc", f"tail -n {lines} {custom_path} 2>/dev/null"]
+    return _parse_log_output(run_cmd(cmd), source, member_name, node_host)
+
+
+def fetch_custom_path_logs_ssh(
+    ssh_target: str,
+    source: LogSource,
+    lines: int,
+    member_name: str,
+    node_host: str,
+    custom_path: str,
+    known_hosts_file: str | None = None,
+) -> list[LogEntry]:
+    cmd = ["bash", "-lc", f"tail -n {lines} {custom_path} 2>/dev/null"]
+    return _parse_log_output(
+        ssh_exec(ssh_target, cmd, known_hosts_file=known_hosts_file),
+        source,
+        member_name,
+        node_host,
+    )
 
 
 def _parse_log_output(raw: str, source: LogSource, member_name: str, node_host: str) -> list[LogEntry]:
@@ -182,10 +266,21 @@ def load_config(path: Path) -> dict[str, Any]:
     return json.loads(text)
 
 
-def collect_bundle(cfg: dict[str, Any], lines: int, sources: list[LogSource]) -> tuple[dict[str, Any], list[LogEntry]]:
+def collect_bundle(
+    cfg: dict[str, Any],
+    lines: int,
+    sources: list[LogSource],
+    *,
+    interactive: bool = True,
+) -> tuple[dict[str, Any], list[LogEntry]]:
     docker_hosts: dict[str, str] = {str(k): str(v) for k, v in (cfg.get("docker_hosts") or {}).items()}
+    ssh_hosts: dict[str, str] = {str(k): str(v) for k, v in (cfg.get("ssh_hosts") or {}).items()}
     discovery = cfg.get("discovery") or {}
-    is_local = discovery.get("kind") == "local_postgresql" or (not docker_hosts and cfg.get("local_mode"))
+    discovery_kind = str(discovery.get("kind") or "")
+    is_local = discovery_kind == "local_postgresql" or (not docker_hosts and cfg.get("local_mode"))
+    is_host_patroni = discovery_kind == "host_patroni" or (
+        not docker_hosts and str(cfg.get("patroni_url") or cfg.get("patroni_seed_url") or "").strip() != ""
+    )
 
     nodes_cfg = cfg.get("nodes") or []
     node_payload: list[dict[str, str]] = []
@@ -193,7 +288,7 @@ def collect_bundle(cfg: dict[str, Any], lines: int, sources: list[LogSource]) ->
         for n in nodes_cfg:
             host = str(n.get("host") or "")
             member = str(n.get("member_name") or host)
-            if is_local or host in docker_hosts:
+            if is_local or is_host_patroni or host in docker_hosts:
                 node_payload.append({"host": host, "member_name": member})
     elif docker_hosts:
         for host, container in docker_hosts.items():
@@ -204,7 +299,31 @@ def collect_bundle(cfg: dict[str, Any], lines: int, sources: list[LogSource]) ->
     if not node_payload:
         raise SystemExit("No nodes to collect — run discovery or fix config.yaml")
 
+    remote_hosts = [
+        n["host"]
+        for n in node_payload
+        if n["host"] not in _LOCAL_HOST_ALIASES and n["host"] not in docker_hosts
+    ]
+    temp_known_hosts: str | None = None
+    ssh_ready: dict[str, bool] = {}
+    if remote_hosts:
+        tmp = tempfile.NamedTemporaryFile(prefix="pgdct-known-hosts-", delete=False)
+        temp_known_hosts = tmp.name
+        tmp.close()
+        for host in sorted(set(remote_hosts)):
+            target = ssh_hosts.get(host) or host
+            probe = ssh_exec(target, ["true"], known_hosts_file=temp_known_hosts, timeout=8)
+            ssh_ready[host] = probe.strip() == ""
+        if interactive:
+            bad = [h for h, ok in ssh_ready.items() if not ok]
+            if bad:
+                print("\n[SSH] Some remote nodes are not reachable with key-based SSH:")
+                for b in bad:
+                    print(f"  - {b} (target: {ssh_hosts.get(b) or b})")
+                print("You can configure key-based SSH or provide ssh_hosts mapping in config.yaml.")
+
     entries: list[LogEntry] = []
+    skipped_nodes: list[dict[str, str]] = []
     for node in node_payload:
         host = node["host"]
         member = node["member_name"]
@@ -212,8 +331,47 @@ def collect_bundle(cfg: dict[str, Any], lines: int, sources: list[LogSource]) ->
         for source in sources:
             if container:
                 entries.extend(fetch_source_logs_docker(container, source, lines, member, host))
+                continue
+            if host in _LOCAL_HOST_ALIASES:
+                local_logs = fetch_source_logs_local(source, lines, member, host)
+                if not local_logs and interactive:
+                    custom_path = ask_text(
+                        f"[{host}] No {source} logs found via journal/default paths. Enter custom log path (or empty to skip): "
+                    )
+                    if custom_path:
+                        local_logs = fetch_custom_path_logs_local(source, lines, member, host, custom_path)
+                entries.extend(local_logs)
+                continue
+            ssh_target = ssh_hosts.get(host) or host
+            if ssh_ready and not ssh_ready.get(host, False):
+                skipped_nodes.append({"host": host, "member_name": member, "source": source, "reason": "ssh_unreachable"})
+                continue
+            remote = fetch_source_logs_ssh(
+                ssh_target,
+                source,
+                lines,
+                member,
+                host,
+                known_hosts_file=temp_known_hosts,
+            )
+            if not remote and interactive:
+                custom_path = ask_text(
+                    f"[{host}] No {source} logs found via journal/default paths. Enter custom remote log path (or empty to skip): "
+                )
+                if custom_path:
+                    remote = fetch_custom_path_logs_ssh(
+                        ssh_target,
+                        source,
+                        lines,
+                        member,
+                        host,
+                        custom_path,
+                        known_hosts_file=temp_known_hosts,
+                    )
+            if remote:
+                entries.extend(remote)
             else:
-                entries.extend(fetch_source_logs_local(source, lines, member, host))
+                skipped_nodes.append({"host": host, "member_name": member, "source": source})
 
     entries.sort(key=lambda e: e.ts or e.message, reverse=True)
 
@@ -246,7 +404,11 @@ def collect_bundle(cfg: dict[str, Any], lines: int, sources: list[LogSource]) ->
         "patroni_snapshot": patroni_snapshot,
         "hostname": subprocess.getoutput("hostname").strip(),
         "discovery": discovery,
+        "skipped_nodes": skipped_nodes,
+        "ssh_probe": ssh_ready,
     }
+    if temp_known_hosts:
+        Path(temp_known_hosts).unlink(missing_ok=True)
     return manifest, entries
 
 
@@ -290,6 +452,7 @@ def main() -> None:
     parser.add_argument("--discover", action="store_true", help="only list detected environments")
     parser.add_argument("-y", "--yes", action="store_true", help="non-interactive: pick first environment")
     parser.add_argument("--pick", type=int, default=None, help="pick environment by index from discovery")
+    parser.add_argument("--no-prompt", action="store_true", help="disable follow-up prompts for missing logs")
     args = parser.parse_args()
 
     sources = [s.strip() for s in args.sources.split(",") if s.strip()]
@@ -303,8 +466,13 @@ def main() -> None:
     if args.config and args.config.is_file():
         cfg = load_config(args.config)
         lines = args.lines or int(cfg.get("lines_per_source") or 500)
+        if not args.yes:
+            print("Loaded manual config.")
+            if not ask_yes_no("Proceed with collection using this config?", default=True):
+                print("Cancelled by user.")
+                sys.exit(1)
     else:
-        print("Scanning for Docker Patroni clusters and local PostgreSQL…\n")
+        print("Scanning for host Patroni, Docker Patroni, and local PostgreSQL…\n")
         target = resolve_target(
             discover_only=False,
             non_interactive=args.yes,
@@ -316,14 +484,32 @@ def main() -> None:
         cfg = target_to_config(target, lines_per_source=args.lines)
         lines = args.lines
         print(f"Collecting from: {target.label}\n")
+        if not args.yes:
+            print("Discovered nodes:")
+            for n in cfg.get("nodes") or []:
+                print(f"  - {n.get('member_name')} ({n.get('host')})")
+            if not ask_yes_no("Start collecting logs from these nodes now?", default=True):
+                print("Cancelled by user.")
+                sys.exit(1)
 
     work = args.output_dir / ".pgdct-bundle-work"
     if work.exists():
         shutil.rmtree(work)
-    manifest, entries = collect_bundle(cfg, lines, valid)
+    manifest, entries = collect_bundle(
+        cfg,
+        lines,
+        valid,
+        interactive=(not args.yes and not args.no_prompt),
+    )
     archive = write_outputs(manifest, entries, work)
     print(f"OK  {archive}")
     print(f"    cluster={manifest.get('patroni_scope')}  lines={len(entries)}  nodes={len(manifest.get('nodes') or [])}")
+    skipped = manifest.get("skipped_nodes") or []
+    if skipped:
+        print(f"    skipped={len(skipped)} node/source attempts (see manifest.json)")
+    ssh_probe = manifest.get("ssh_probe") or {}
+    if ssh_probe:
+        print("    ssh equivalency check done; temporary known_hosts was cleaned after collection.")
     print("Send this .tar.gz to your support team. Import in PG-DCT with your customer name (Müşteri adı).")
 
 

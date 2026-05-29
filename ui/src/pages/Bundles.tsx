@@ -88,11 +88,11 @@ export default function Bundles() {
   const onImport = async () => {
     const file = fileRef.current?.files?.[0];
     if (!file) {
-      setErr("Müşteriden gelen bundle .tar.gz dosyasını seçin");
+      setErr("Select the .tar.gz bundle file from the customer.");
       return;
     }
     if (!customerName.trim()) {
-      setErr("Müşteri adı zorunludur");
+      setErr("Customer name is required.");
       return;
     }
     setImporting(true);
@@ -116,19 +116,19 @@ export default function Bundles() {
     <>
       <header className="page-header">
         <div>
-          <h1>Bundles</h1>
+          <h1>Bundle Import</h1>
           <p className="sub">
-            Müşteri bundle import · müşteri seçerek log analizi · lab ortamında doğrudan toplama
+            Import customer bundles, select a customer, and open troubleshooting logs.
           </p>
         </div>
       </header>
 
       <section className="card">
-        <h2>Müşteri seç</h2>
-        <p className="sub">Import ettiğiniz müşteriler burada listelenir. Seçince en son bundle log analizine açılır.</p>
+        <h2>Select Customer</h2>
+        <p className="sub">Imported customers are listed here. Selecting one opens its latest bundle logs.</p>
         <div className="cluster-bar" style={{ display: "flex", gap: "1rem", flexWrap: "wrap", alignItems: "flex-end" }}>
           <label className="field field-grow">
-            Müşteri
+            Customer
             <select
               value={selectedCustomer}
               onChange={(e) => {
@@ -138,7 +138,7 @@ export default function Bundles() {
                 if (c) activateCustomer(c);
               }}
             >
-              <option value="">— Tümü —</option>
+              <option value="">— All —</option>
               {customers.map((c) => (
                 <option key={c.name} value={c.name}>
                   {c.name} ({c.bundle_count} bundle)
@@ -155,7 +155,7 @@ export default function Bundles() {
                 if (c) activateCustomer(c);
               }}
             >
-              Logları aç
+              Open logs
             </button>
           )}
         </div>
@@ -164,17 +164,17 @@ export default function Bundles() {
       <section className="card">
         <h2>Import customer bundle</h2>
         <p className="sub">
-          Müşteri <code>./pgdct-bundle-collect.sh</code> çalıştırır (ortamı otomatik keşfeder) ve{" "}
-          <code>bundle_*.tar.gz</code> gönderir. Cluster adı bundle içindeki Patroni scope&apos;undan okunur.
+          The customer runs <code>./bundlecollectorlog.sh</code> (auto-discovery) and sends{" "}
+          <code>bundle_*.tar.gz</code>. Cluster name is read from Patroni scope inside the bundle.
         </p>
         <div className="filters" style={{ alignItems: "flex-end" }}>
           <div className="field field-grow">
-            <label>Müşteri adı</label>
+            <label>Customer name</label>
             <input
               type="text"
               value={customerName}
               onChange={(e) => setCustomerName(e.target.value)}
-              placeholder="ör. Acme Bank"
+              placeholder="e.g. Acme Bank"
               list="customer-suggestions"
             />
             <datalist id="customer-suggestions">
@@ -199,7 +199,7 @@ export default function Bundles() {
             {importResult.log_time_start && importResult.log_time_end && (
               <>
                 <br />
-                <strong>Log aralığı:</strong> {formatRange(importResult.log_time_start, importResult.log_time_end)}
+                <strong>Log range:</strong> {formatRange(importResult.log_time_start, importResult.log_time_end)}
               </>
             )}
             {" — "}
@@ -244,7 +244,7 @@ export default function Bundles() {
             <thead>
               <tr>
                 <th>Bundle</th>
-                <th>Müşteri</th>
+                <th>Customer</th>
                 <th>Cluster</th>
                 <th>Log range</th>
                 <th>Lines</th>

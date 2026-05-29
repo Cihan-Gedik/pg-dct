@@ -1,4 +1,4 @@
-"""Auto-discover Patroni (Docker) and local PostgreSQL environments."""
+"""Auto-discover standard Patroni environments (host-first), then Docker/local."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ import sys
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
-EnvKind = Literal["docker_patroni", "local_postgresql"]
+EnvKind = Literal["host_patroni", "docker_patroni", "local_postgresql"]
 
 
 @dataclass
@@ -35,6 +35,51 @@ def _run(cmd: list[str], timeout: float = 30.0) -> tuple[int, str]:
 def has_docker() -> bool:
     code, _ = _run(["docker", "info"], timeout=15)
     return code == 0
+
+
+def patroni_cluster_from_url(url: str) -> dict[str, Any] | None:
+    code, out = _run(["curl", "-sf", "-m", "5", f"{url.rstrip('/')}/cluster"], timeout=8)
+    if code != 0 or not out:
+        return None
+    try:
+        return json.loads(out)
+    except json.JSONDecodeError:
+        return None
+
+
+def discover_host_patroni() -> DiscoveredTarget | None:
+    candidates = [
+        "http://127.0.0.1:8008",
+        "http://localhost:8008",
+        "http://127.0.0.1:18008",
+        "http://localhost:18008",
+    ]
+    for url in candidates:
+        data = patroni_cluster_from_url(url)
+        if not data:
+            continue
+        members_raw = data.get("members") or []
+        nodes: list[dict[str, str]] = []
+        for m in members_raw:
+            if not isinstance(m, dict):
+                continue
+            host = str(m.get("host") or "").strip()
+            name = str(m.get("name") or host or "unknown")
+            if host:
+                nodes.append({"host": host, "member_name": name})
+        scope = str(data.get("scope") or data.get("cluster") or "patroni-cluster")
+        if not nodes:
+            continue
+        return DiscoveredTarget(
+            kind="host_patroni",
+            label=f"Host Patroni — {scope} ({len(nodes)} nodes)",
+            patroni_scope=scope,
+            docker_hosts={},
+            nodes=nodes,
+            patroni_url=url,
+            detail=f"patroni API: {url}",
+        )
+    return None
 
 
 def has_local_postgresql() -> bool:
@@ -166,6 +211,9 @@ def discover_local_postgresql() -> DiscoveredTarget | None:
 
 def discover_all() -> list[DiscoveredTarget]:
     found: list[DiscoveredTarget] = []
+    host_patroni = discover_host_patroni()
+    if host_patroni:
+        found.append(host_patroni)
     if has_docker():
         found.extend(discover_docker_patroni_clusters())
     local = discover_local_postgresql()
@@ -180,11 +228,13 @@ def target_to_config(target: DiscoveredTarget, lines_per_source: int = 500) -> d
         "patroni_url": target.patroni_url,
         "lines_per_source": lines_per_source,
         "docker_hosts": target.docker_hosts,
+        "ssh_hosts": {},
         "nodes": target.nodes,
         "discovery": {
             "kind": target.kind,
             "label": target.label,
             "detail": target.detail,
+            "patroni_scope": target.patroni_scope,
         },
     }
 
@@ -192,7 +242,8 @@ def target_to_config(target: DiscoveredTarget, lines_per_source: int = 500) -> d
 def print_discovery_report(targets: list[DiscoveredTarget]) -> None:
     print("PG-DCT Bundle Collector — environment discovery\n")
     if not targets:
-        print("No Patroni Docker clusters or local PostgreSQL detected.")
+        print("No host Patroni, Docker Patroni, or local PostgreSQL detected.")
+        print("  - Host Patroni: ensure curl http://127.0.0.1:8008/cluster works")
         print("  - Docker: ensure Patroni containers run and port 8008 answers inside the container")
         print("  - Local: ensure pg_isready / psql works on localhost")
         return

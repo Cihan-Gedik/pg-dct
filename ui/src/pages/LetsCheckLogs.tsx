@@ -65,7 +65,7 @@ export default function LetsCheckLogs() {
     <>
       <header className="page-header">
         <div>
-          <h1>Live Logs</h1>
+          <h1>Realtime Logs</h1>
           <p className="sub">Deep log view for cluster {filters.clusterId}</p>
         </div>
         <button type="button" className="btn primary" disabled={loading} onClick={refresh}>

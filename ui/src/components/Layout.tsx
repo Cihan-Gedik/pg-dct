@@ -2,11 +2,11 @@ import { NavLink, Outlet } from "react-router-dom";
 
 const links = [
   { to: "/", label: "Dashboard" },
-  { to: "/live", label: "Live Monitor" },
+  { to: "/live", label: "Cluster Health" },
   { to: "/backup", label: "Backup" },
-  { to: "/live-logs", label: "Live Logs" },
-  { to: "/bundle-logs", label: "Bundle Logs" },
-  { to: "/bundles", label: "Bundles" },
+  { to: "/live-logs", label: "Realtime Logs" },
+  { to: "/bundles", label: "Bundle Import" },
+  { to: "/bundle-logs", label: "Troubleshoot" },
   { to: "/settings", label: "Settings" },
 ];
 

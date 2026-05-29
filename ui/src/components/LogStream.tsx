@@ -200,7 +200,7 @@ export function LogFiltersBar({
               {includeLiveBundleOption && <option value="live">Live tail</option>}
               {bundleOptions.map((b) => (
                 <option key={b.id} value={b.id}>
-                  {b.id} ({b.line_count} lines)
+                  {b.id}
                 </option>
               ))}
             </select>

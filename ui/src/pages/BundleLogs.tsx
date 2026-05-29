@@ -128,11 +128,11 @@ export default function BundleLogs() {
     <>
       <header className="page-header">
         <div>
-          <h1>Bundle Logs</h1>
+          <h1>Troubleshoot</h1>
           <p className="sub">
             {selectedCustomer
               ? `Imported bundle logs · ${selectedCustomer}${selectedBundle ? ` · ${selectedBundle.id}` : ""}`
-              : "Musteri secildiginde imported bundle loglari gosterilir"}
+              : "Imported bundle logs appear after selecting a customer."}
           </p>
         </div>
         <button type="button" className="btn primary" disabled={loading || !bundleId} onClick={refresh}>
@@ -142,9 +142,9 @@ export default function BundleLogs() {
 
       <section className="card">
         <div className="field field-grow">
-          <label>Musteri</label>
+          <label>Customer</label>
           <select value={selectedCustomer} onChange={(e) => onCustomerChange(e.target.value)}>
-            <option value="">Seciniz</option>
+            <option value="">Select</option>
             {customers.map((c) => (
               <option key={c.name} value={c.name}>
                 {c.name} ({c.bundle_count})
@@ -156,7 +156,7 @@ export default function BundleLogs() {
 
       {!selectedCustomer ? (
         <section className="card">
-          <p>Bu ekran sadece import edilmis musteri bundle verisini gosterir. Devam etmek icin bir musteri secin.</p>
+          <p>This screen only shows imported customer bundle data. Select a customer to continue.</p>
         </section>
       ) : (
         <>

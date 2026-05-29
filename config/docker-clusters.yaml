@@ -30,6 +30,9 @@ clusters:
     patroni_scope: bc-pg-main
     patroni_seed_url: http://127.0.0.1:20080
     poll_interval_sec: 5
+    pgbackrest:
+      enabled: true
+      stanza: bc-pg-main
     docker_hosts:
       "172.20.0.2": bundlecollect-cihangedik-node0
       "172.20.0.3": bundlecollect-cihangedik-node1

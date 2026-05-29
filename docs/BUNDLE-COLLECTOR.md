@@ -4,7 +4,7 @@
 
 ```mermaid
 flowchart LR
-  A[Müşteri: pgdct-bundle-collect.sh] --> B[Keşif: Docker Patroni / local PG]
+  A[Müşteri: pgdct-bundle-collect.sh] --> B[Keşif: Host Patroni / Docker Patroni / local PG]
   B --> C[Seçim: cluster]
   C --> D[bundle_DATE.tar.gz]
   D --> E[Sen: UI Import + Müşteri adı]
@@ -26,10 +26,13 @@ chmod +x pgdct-bundle-collect.sh
 ./pgdct-bundle-collect.sh
 ```
 
-Script otomatik tarar:
+Script otomatik tarar (öncelik sırası):
 
-- **Docker Patroni** — container içinden `/cluster`, tüm node IP’leri, cluster adı (scope)
-- **Local PostgreSQL** — `pg_isready` / `psql` varsa (tek node, host logları)
+1. **Host Patroni (standart, non-Docker)** — `http://127.0.0.1:8008/cluster`
+2. **Docker Patroni** — container içinden `/cluster`
+3. **Local PostgreSQL** — `pg_isready` / `psql` varsa (tek node, host logları)
+
+Host Patroni çok node ise collector peer node'lara SSH ile bağlanmayı dener.
 
 Liste gelir, numara seçer (veya `-y` ile ilki). Çıktı: **`bundle_YYYYMMDDTHHMMSSZ.tar.gz`**
 
@@ -78,5 +81,6 @@ curl -s "http://127.0.0.1:8080/api/v1/bundles?customer_name=Acme%20Bank"
 ## Gereksinimler (müşteri)
 
 - Python 3.10+
-- Docker + Patroni lab container’larına `docker exec`
-- Patroni API container içinde `http://127.0.0.1:8008/cluster`
+- Standart Patroni kurulumunda: hosttan `curl http://127.0.0.1:8008/cluster`
+- Çok node Host Patroni için: peer node'lara SSH erişimi (opsiyonel `ssh_hosts` map)
+- Docker modu için: Docker + `docker exec` erişimi

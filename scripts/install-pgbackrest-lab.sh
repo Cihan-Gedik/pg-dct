@@ -5,6 +5,7 @@
 # Usage:
 #   ./scripts/install-pgbackrest-lab.sh vanilla
 #   ./scripts/install-pgbackrest-lab.sh main
+#   ./scripts/install-pgbackrest-lab.sh bundlecollect
 #
 set -euo pipefail
 
@@ -12,7 +13,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 CONF_TPL="${ROOT}/deploy/pgbackrest/pgbackrest-lab.conf.tpl"
 
 usage() {
-  echo "Usage: $0 <vanilla|main>" >&2
+  echo "Usage: $0 <vanilla|main|bundlecollect>" >&2
   exit 1
 }
 
@@ -39,6 +40,16 @@ case "$TARGET" in
     )
     LEADER_CONTAINER="logcollector-cihangedik-node0"
     PATRONI_CFG="/etc/patroni/lc-pg-main-0.yml"
+    ;;
+  bundlecollect)
+    STANZA="bc-pg-main"
+    CONTAINERS=(
+      bundlecollect-cihangedik-node0
+      bundlecollect-cihangedik-node1
+      bundlecollect-cihangedik-node2
+    )
+    LEADER_CONTAINER="bundlecollect-cihangedik-node0"
+    PATRONI_CFG="/etc/patroni/bc-pg-main-0.yml"
     ;;
   *)
     usage

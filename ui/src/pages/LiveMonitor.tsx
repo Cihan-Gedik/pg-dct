@@ -123,7 +123,7 @@ export default function LiveMonitor() {
     <div className="live-page live-page-simple">
       <header className="page-header compact">
         <div>
-          <h1>Live Monitor</h1>
+          <h1>Cluster Health</h1>
           <p className="sub">One cluster at a time — overview and logs</p>
         </div>
         <div className="row header-actions">

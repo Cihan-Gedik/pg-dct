@@ -357,7 +357,7 @@ export default function Backup() {
             <h2 className="card-title">WAL archive health</h2>
             <p className="card-desc">
               Archive lag and gap detection need agent snapshots (PCT-style). For now use{" "}
-              <strong>Live Monitor → Logs</strong> with pgBackRest / Patroni sources, or cluster
+              <strong>Cluster Health → Realtime Logs</strong> with pgBackRest / Patroni sources, or cluster
               alerts on the Dashboard.
             </p>
             {info?.ok && stanzas.length > 0 && (
