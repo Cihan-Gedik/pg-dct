@@ -1,5 +1,7 @@
 from collections.abc import AsyncGenerator
+from pathlib import Path
 
+from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
 
@@ -21,6 +23,10 @@ async def get_session() -> AsyncGenerator[AsyncSession, None]:
 
 async def init_db() -> None:
     from app import models  # noqa: F401
+
+    url = make_url(settings.database_url)
+    if url.drivername.startswith("sqlite") and url.database not in (None, "", ":memory:"):
+        Path(url.database).expanduser().parent.mkdir(parents=True, exist_ok=True)
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
