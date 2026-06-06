@@ -138,6 +138,22 @@ export type BackupJob = {
   error: string | null;
 };
 
+export type BackupSchedule = {
+  id: number;
+  cluster_id: string;
+  name: string;
+  kind: BackupJobKind;
+  cron: string;
+  stanza: string;
+  enabled: boolean;
+  next_run_at: string | null;
+  last_run_at: string | null;
+  last_status: string | null;
+  last_job_id: number | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type PostgresSetting = {
   name: string;
   label: string;
@@ -291,5 +307,32 @@ export const api = {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
+    }),
+  backupSchedules: (id: string) =>
+    request<BackupSchedule[]>(`/api/v1/clusters/${id}/backup/schedules`),
+  createBackupSchedule: (
+    id: string,
+    body: { name: string; kind: BackupJobKind; cron: string; stanza?: string; enabled?: boolean },
+  ) =>
+    request<BackupSchedule>(`/api/v1/clusters/${id}/backup/schedules`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }),
+  updateBackupSchedule: (
+    id: string,
+    scheduleId: number,
+    body: Partial<{ name: string; kind: BackupJobKind; cron: string; stanza: string; enabled: boolean }>,
+  ) =>
+    request<BackupSchedule>(`/api/v1/clusters/${id}/backup/schedules/${scheduleId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }),
+  deleteBackupSchedule: (id: string, scheduleId: number) =>
+    request<void>(`/api/v1/clusters/${id}/backup/schedules/${scheduleId}`, { method: "DELETE" }),
+  runBackupSchedule: (id: string, scheduleId: number) =>
+    request<BackupJob>(`/api/v1/clusters/${id}/backup/schedules/${scheduleId}/run`, {
+      method: "POST",
     }),
 };

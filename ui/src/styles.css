@@ -745,8 +745,13 @@ td.num.warning { color: #fbbf24; }
 .job-row-clickable { cursor: pointer; }
 .job-row-clickable:hover { background: #33415540; }
 .backup-job-form { margin-bottom: 14px; }
+.backup-schedule-form { margin-bottom: 14px; }
 .backup-schedule-presets { margin: 0; padding-left: 18px; font-size: 13px; }
 .backup-schedule-presets li { margin: 6px 0; }
+.backup-page .wide-field input { min-width: 220px; }
+.schedule-actions { gap: 6px; flex-wrap: nowrap; }
+.schedule-actions .btn { padding: 6px 9px; }
+.schedule-last-status { margin-left: 6px; }
 
 .backup-timeline-empty {
   padding: 32px;
