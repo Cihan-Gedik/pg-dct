@@ -45,8 +45,11 @@ Liste gelir, numara seçer (veya `-y` ile ilki). Çıktı: **`bundle_YYYYMMDDTHH
 | `./pgdct-bundle-collect.sh -y` | İlk ortamı otomatik seç |
 | `./pgdct-bundle-collect.sh --pick 2` | 2. ortamı seç |
 | `./pgdct-bundle-collect.sh -c config.yaml` | Manuel config (keşif yok) |
+| `./pgdct-bundle-collect.sh --sources postgres,os` | Kaynakları zorla (auto’yu ezer) |
 
-Toplanan kaynaklar: **patroni, postgresql, etcd, os** (her node).
+**Kaynaklar (auto):** Standalone / Patroni unit yok → **postgres, os** only. Docker veya host Patroni → **patroni, postgres, etcd, os**. `--sources` verilirse auto devre dışı.
+
+**PostgreSQL log keşfi (postgres kaynağı):** sırayla dener — `journalctl` (`postgresql`, `postgresql-16`, `postgresql@*` unit’leri), `psql` ile `SHOW log_directory` / `log_filename`, bilinen dizinler (`/var/log/postgresql`, RHEL `/var/lib/pgsql/...`), `config.yaml` içindeki `postgres_log_paths`, toplama sırasında interaktif custom path.
 
 ## 2) Sen import et (PG-DCT UI)
 

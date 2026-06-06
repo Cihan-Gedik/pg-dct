@@ -112,11 +112,23 @@ def parse_journal_line(line: str) -> tuple[str, str]:
 
 
 async def _docker_exec(container: str, cmd: list[str], timeout: float = 30.0) -> str:
+    code, out = await docker_exec(container, cmd, timeout=timeout)
+    return out
+
+
+async def docker_exec(
+    container: str,
+    cmd: list[str],
+    *,
+    user: str | None = None,
+    timeout: float = 30.0,
+) -> tuple[int, str]:
+    argv = ["docker", "exec"]
+    if user:
+        argv.extend(["-u", user])
+    argv.extend([container, *cmd])
     proc = await asyncio.create_subprocess_exec(
-        "docker",
-        "exec",
-        container,
-        *cmd,
+        *argv,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.STDOUT,
     )
@@ -124,8 +136,9 @@ async def _docker_exec(container: str, cmd: list[str], timeout: float = 30.0) ->
         stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=timeout)
     except TimeoutError:
         proc.kill()
-        return ""
-    return (stdout or b"").decode("utf-8", errors="replace")
+        return 124, "timeout"
+    text = (stdout or b"").decode("utf-8", errors="replace")
+    return proc.returncode or 0, text
 
 
 async def fetch_source_logs(

@@ -698,6 +698,22 @@ td.num.warning { color: #fbbf24; }
   font-weight: 700;
   text-transform: uppercase;
 }
+.log-time-presets { align-items: flex-start; }
+.log-time-custom {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.log-time-custom input[type="datetime-local"] {
+  font: inherit;
+  font-size: 12px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid #334155;
+  background: #0f172a;
+  color: #e2e8f0;
+}
 .filters { flex-wrap: wrap; }
 .field-grow { flex: 1; min-width: 160px; }
 .filter-checkbox {

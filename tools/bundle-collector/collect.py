@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import shlex
 import shutil
 import socket
 import subprocess
@@ -28,38 +29,77 @@ from discovery import discover_all, print_discovery_report, resolve_target, targ
 LogSource = Literal["patroni", "postgres", "etcd", "os"]
 LogLevel = Literal["critical", "warning", "info"]
 
+ALL_LOG_SOURCES: list[LogSource] = ["patroni", "postgres", "etcd", "os"]
+STANDALONE_LOG_SOURCES: list[LogSource] = ["postgres", "os"]
+
 LEVEL_PATTERNS: list[tuple[re.Pattern[str], LogLevel]] = [
     (re.compile(r"\b(FATAL|CRITICAL|PANIC)\b", re.I), "critical"),
     (re.compile(r"\b(ERROR|ERR)\b", re.I), "critical"),
     (re.compile(r"\b(WARNING|WARN)\b", re.I), "warning"),
 ]
 
+# Common on-disk PostgreSQL log locations (Debian, RHEL, Percona, Homebrew, lab paths).
+_POSTGRES_FILE_GLOBS: tuple[str, ...] = (
+    "/var/log/postgresql/*.log",
+    "/pg/pglogs/postgresql*.log",
+    "/var/lib/pgsql/*/log/*.log",
+    "/opt/homebrew/var/log/postgresql*.log",
+    "/usr/local/var/log/postgresql*.log",
+    "$HOME/Library/Logs/Homebrew/postgresql*.log",
+)
+
 DOCKER_SOURCE_COMMANDS: dict[LogSource, list[str]] = {
     "patroni": ["journalctl", "-u", "patroni", "-n", "{n}", "--no-pager", "-o", "short-iso"],
-    "postgres": [
-        "bash",
-        "-c",
-        "tail -n {n} /var/log/postgresql/*.log 2>/dev/null; "
-        "tail -n {n} /pg/pglogs/postgresql*.log 2>/dev/null; "
-        "tail -n {n} /var/lib/pgsql/*/log/*.log 2>/dev/null",
-    ],
     "etcd": ["journalctl", "-u", "etcd", "-n", "{n}", "--no-pager", "-o", "short-iso"],
     "os": ["journalctl", "-n", "{n}", "--no-pager", "-o", "short-iso"],
 }
 
 LOCAL_SOURCE_COMMANDS: dict[LogSource, list[str]] = {
     "patroni": ["journalctl", "-u", "patroni", "-n", "{n}", "--no-pager", "-o", "short-iso"],
-    "postgres": [
-        "bash",
-        "-c",
-        "tail -n {n} /var/log/postgresql/*.log 2>/dev/null; "
-        "tail -n {n} /opt/homebrew/var/log/postgresql*.log 2>/dev/null; "
-        "tail -n {n} /usr/local/var/log/postgresql*.log 2>/dev/null; "
-        "tail -n {n} ~/Library/Logs/Homebrew/postgresql*.log 2>/dev/null",
-    ],
     "etcd": ["journalctl", "-u", "etcd", "-n", "{n}", "--no-pager", "-o", "short-iso"],
     "os": ["journalctl", "-n", "{n}", "--no-pager", "-o", "short-iso"],
 }
+
+
+def build_postgres_collect_command(lines: int, extra_paths: list[str] | None = None) -> list[str]:
+    """
+    Collect PostgreSQL logs from journal (postgresql@*, postgresql-NN) and files.
+    Uses psql SHOW log_directory / log_filename when available, then known globs.
+    """
+    n = int(lines)
+    file_tails = " ".join(f"tail -n {n} {g} 2>/dev/null;" for g in _POSTGRES_FILE_GLOBS)
+    extra_tails = " ".join(f"tail -n {n} {shlex.quote(p)} 2>/dev/null;" for p in (extra_paths or []))
+    script = f"""
+for u in postgresql postgres postgresql-16 postgresql-15 postgresql-14 postgresql-13; do
+  journalctl -u "$u" -n {n} --no-pager -o short-iso 2>/dev/null
+done
+systemctl list-units --type=service --all --no-legend 2>/dev/null | awk '{{print $1}}' | grep -E '^postgres' | while read -r u; do
+  journalctl -u "$u" -n {n} --no-pager -o short-iso 2>/dev/null
+done
+if command -v psql >/dev/null 2>&1; then
+  _ld=$(psql -Atqc "SHOW log_directory" 2>/dev/null | head -1 | tr -d '\\r')
+  _lf=$(psql -Atqc "SHOW log_filename" 2>/dev/null | head -1 | tr -d '\\r')
+  _dd=$(psql -Atqc "SHOW data_directory" 2>/dev/null | head -1 | tr -d '\\r')
+  if [ -n "$_ld" ] && [ -n "$_lf" ]; then
+    case "$_ld" in
+      /*) _base="$_ld" ;;
+      *) _base="$_dd/$_ld" ;;
+    esac
+    if [ -f "$_base/$_lf" ]; then tail -n {n} "$_base/$_lf" 2>/dev/null; fi
+    if [ -d "$_base" ]; then tail -n {n} "$_base"/*.log 2>/dev/null; tail -n {n} "$_base"/postgresql*.log 2>/dev/null; fi
+  fi
+fi
+{file_tails}
+{extra_tails}
+""".strip().replace("\n", " ")
+    return ["bash", "-c", script]
+
+
+def _postgres_extra_paths(cfg: dict[str, Any]) -> list[str]:
+    raw = cfg.get("postgres_log_paths") or []
+    if isinstance(raw, str):
+        return [raw.strip()] if raw.strip() else []
+    return [str(p).strip() for p in raw if str(p).strip()]
 
 _LOCAL_HOST_ALIASES = {"127.0.0.1", "localhost", socket.gethostname(), socket.getfqdn()}
 
@@ -94,6 +134,55 @@ def ask_text(prompt: str) -> str:
         return input(prompt).strip()
     except (EOFError, KeyboardInterrupt):
         return ""
+
+
+def parse_sources_arg(raw: str | None) -> list[LogSource] | None:
+    """Return explicit --sources list, or None when the CLI flag was not provided."""
+    if raw is None:
+        return None
+    picked = [s.strip() for s in raw.split(",") if s.strip()]
+    valid: list[LogSource] = [s for s in picked if s in ALL_LOG_SOURCES]  # type: ignore[misc]
+    return valid or list(ALL_LOG_SOURCES)
+
+
+def _systemd_unit_exists_local(unit: str) -> bool:
+    try:
+        proc = subprocess.run(
+            ["systemctl", "cat", f"{unit}.service"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+        return proc.returncode == 0
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        return False
+
+
+def resolve_default_sources(cfg: dict[str, Any]) -> list[LogSource]:
+    """
+    Pick log sources from discovered/configured environment.
+    Standalone PostgreSQL and hosts without Patroni systemd units → postgres + os only.
+    """
+    discovery = cfg.get("discovery") or {}
+    kind = str(discovery.get("kind") or "")
+    if kind == "local_postgresql":
+        return list(STANDALONE_LOG_SOURCES)
+    if cfg.get("docker_hosts"):
+        return list(ALL_LOG_SOURCES)
+    if kind == "host_patroni" or str(cfg.get("patroni_url") or cfg.get("patroni_seed_url") or "").strip():
+        return list(ALL_LOG_SOURCES)
+    if cfg.get("sources"):
+        picked = parse_sources_arg(str(cfg.get("sources")))
+        if picked is not None:
+            return picked
+    has_patroni = _systemd_unit_exists_local("patroni")
+    if not has_patroni:
+        return list(STANDALONE_LOG_SOURCES)
+    has_etcd = _systemd_unit_exists_local("etcd")
+    if not has_etcd:
+        return ["patroni", "postgres", "os"]
+    return list(ALL_LOG_SOURCES)
 
 
 def classify_level(line: str) -> LogLevel:
@@ -143,15 +232,26 @@ def ssh_exec(
     )
 
 
+def _source_cmd(
+    source: LogSource,
+    lines: int,
+    postgres_extra_paths: list[str] | None,
+) -> list[str]:
+    if source == "postgres":
+        return build_postgres_collect_command(lines, postgres_extra_paths)
+    template = LOCAL_SOURCE_COMMANDS.get(source) or DOCKER_SOURCE_COMMANDS[source]
+    return [part.format(n=lines) if "{n}" in part else part for part in template]
+
+
 def fetch_source_logs_docker(
     container: str,
     source: LogSource,
     lines: int,
     member_name: str,
     node_host: str,
+    postgres_extra_paths: list[str] | None = None,
 ) -> list[LogEntry]:
-    template = DOCKER_SOURCE_COMMANDS[source]
-    cmd = [part.format(n=lines) if "{n}" in part else part for part in template]
+    cmd = _source_cmd(source, lines, postgres_extra_paths)
     return _parse_log_output(docker_exec(container, cmd), source, member_name, node_host)
 
 
@@ -160,9 +260,9 @@ def fetch_source_logs_local(
     lines: int,
     member_name: str,
     node_host: str,
+    postgres_extra_paths: list[str] | None = None,
 ) -> list[LogEntry]:
-    template = LOCAL_SOURCE_COMMANDS[source]
-    cmd = [part.format(n=lines) if "{n}" in part else part for part in template]
+    cmd = _source_cmd(source, lines, postgres_extra_paths)
     return _parse_log_output(run_cmd(cmd), source, member_name, node_host)
 
 
@@ -173,9 +273,9 @@ def fetch_source_logs_ssh(
     member_name: str,
     node_host: str,
     known_hosts_file: str | None = None,
+    postgres_extra_paths: list[str] | None = None,
 ) -> list[LogEntry]:
-    template = LOCAL_SOURCE_COMMANDS[source]
-    cmd = [part.format(n=lines) if "{n}" in part else part for part in template]
+    cmd = _source_cmd(source, lines, postgres_extra_paths)
     return _parse_log_output(
         ssh_exec(ssh_target, cmd, known_hosts_file=known_hosts_file),
         source,
@@ -322,6 +422,8 @@ def collect_bundle(
                     print(f"  - {b} (target: {ssh_hosts.get(b) or b})")
                 print("You can configure key-based SSH or provide ssh_hosts mapping in config.yaml.")
 
+    pg_log_paths = _postgres_extra_paths(cfg)
+
     entries: list[LogEntry] = []
     skipped_nodes: list[dict[str, str]] = []
     for node in node_payload:
@@ -330,10 +432,16 @@ def collect_bundle(
         container = docker_hosts.get(host)
         for source in sources:
             if container:
-                entries.extend(fetch_source_logs_docker(container, source, lines, member, host))
+                entries.extend(
+                    fetch_source_logs_docker(
+                        container, source, lines, member, host, postgres_extra_paths=pg_log_paths
+                    )
+                )
                 continue
             if host in _LOCAL_HOST_ALIASES:
-                local_logs = fetch_source_logs_local(source, lines, member, host)
+                local_logs = fetch_source_logs_local(
+                    source, lines, member, host, postgres_extra_paths=pg_log_paths
+                )
                 if not local_logs and interactive:
                     custom_path = ask_text(
                         f"[{host}] No {source} logs found via journal/default paths. Enter custom log path (or empty to skip): "
@@ -353,6 +461,7 @@ def collect_bundle(
                 member,
                 host,
                 known_hosts_file=temp_known_hosts,
+                postgres_extra_paths=pg_log_paths,
             )
             if not remote and interactive:
                 custom_path = ask_text(
@@ -393,6 +502,7 @@ def collect_bundle(
         "created_at": datetime.now(UTC).isoformat(),
         "lines_per_source": lines,
         "sources": list(sources),
+        "postgres_log_paths": pg_log_paths,
         "nodes": [
             {
                 "host": n["host"],
@@ -448,16 +558,19 @@ def main() -> None:
     parser.add_argument("-c", "--config", type=Path, default=None, help="optional config.yaml (skips discovery)")
     parser.add_argument("-o", "--output-dir", type=Path, default=Path("."), help="output directory")
     parser.add_argument("-n", "--lines", type=int, default=500, help="lines per source")
-    parser.add_argument("--sources", default="patroni,postgres,etcd,os")
+    parser.add_argument(
+        "--sources",
+        default=None,
+        metavar="LIST",
+        help="comma-separated: patroni,postgres,etcd,os (default: auto from discovery)",
+    )
     parser.add_argument("--discover", action="store_true", help="only list detected environments")
     parser.add_argument("-y", "--yes", action="store_true", help="non-interactive: pick first environment")
     parser.add_argument("--pick", type=int, default=None, help="pick environment by index from discovery")
     parser.add_argument("--no-prompt", action="store_true", help="disable follow-up prompts for missing logs")
     args = parser.parse_args()
 
-    sources = [s.strip() for s in args.sources.split(",") if s.strip()]
-    valid: list[LogSource] = [s for s in sources if s in ("patroni", "postgres", "etcd", "os")]  # type: ignore[misc]
-    valid = valid or ["patroni", "postgres", "etcd", "os"]
+    explicit_sources = parse_sources_arg(args.sources)
 
     if args.discover:
         print_discovery_report(discover_all())
@@ -491,6 +604,13 @@ def main() -> None:
             if not ask_yes_no("Start collecting logs from these nodes now?", default=True):
                 print("Cancelled by user.")
                 sys.exit(1)
+
+    if explicit_sources is not None:
+        valid = explicit_sources
+        print(f"Using --sources: {', '.join(valid)}")
+    else:
+        valid = resolve_default_sources(cfg)
+        print(f"Auto-selected sources: {', '.join(valid)}")
 
     work = args.output_dir / ".pgdct-bundle-work"
     if work.exists():

@@ -262,6 +262,7 @@ class LiveClusterResponse(BaseModel):
 
 
 BackupJobKind = Literal[
+    "setup",
     "backup_full",
     "backup_diff",
     "backup_incr",
@@ -273,6 +274,7 @@ BackupJobKind = Literal[
 class BackupInfoResponse(BaseModel):
     cluster_id: str
     ok: bool
+    needs_setup: bool = False
     error: str | None = None
     container: str | None = None
     member: str | None = None
@@ -286,6 +288,11 @@ class BackupInfoResponse(BaseModel):
 class BackupJobCreate(BaseModel):
     kind: BackupJobKind
     params: dict[str, str] = Field(default_factory=dict)
+
+
+class BackupSetupRequest(BaseModel):
+    run_first_backup: bool = True
+    stanza: str | None = None
 
 
 class BackupJobRead(BaseModel):

@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import type { BundleListItem, LogEntry } from "../api";
+import { LOG_RANGE_PRESETS, type LogTimeRange } from "../hooks/useLogFilters";
 
 export type LogFilters = {
   clusterId: string;
@@ -19,6 +20,7 @@ type PanelProps = {
   mode: "live" | "archive";
   paused?: boolean;
   lastRefresh: Date | null;
+  timeRangeLabel?: string;
   peerNoiseFiltered?: number;
   onRefresh: () => void;
   onPauseToggle?: () => void;
@@ -37,6 +39,7 @@ export function LogStreamPanel({
   mode,
   paused,
   lastRefresh,
+  timeRangeLabel,
   peerNoiseFiltered = 0,
   onRefresh,
   onPauseToggle,
@@ -53,6 +56,7 @@ export function LogStreamPanel({
         </span>
         <span className="pill">{lines.length} events</span>
         <span className="pill">etcd: {etcdCount}</span>
+        {timeRangeLabel && <span className="pill">{timeRangeLabel}</span>}
         <span className={`pill refresh-status ${loading ? "loading" : ""}`}>
           Updated {formatTime(lastRefresh)}
         </span>
@@ -121,6 +125,12 @@ type FilterBarProps = {
   setSearch: (v: string) => void;
   suppressPeerNoise: boolean;
   setSuppressPeerNoise: (v: boolean) => void;
+  timeRange: LogTimeRange;
+  setTimeRange: (v: LogTimeRange) => void;
+  rangeFrom: string;
+  setRangeFrom: (v: string) => void;
+  rangeTo: string;
+  setRangeTo: (v: string) => void;
   onApplyPreset: (p: "all" | "etcd" | "patroni" | "errors") => void;
   bundleId?: string;
   setBundleId?: (v: string) => void;
@@ -150,6 +160,12 @@ export function LogFiltersBar({
   setSearch,
   suppressPeerNoise,
   setSuppressPeerNoise,
+  timeRange,
+  setTimeRange,
+  rangeFrom,
+  setRangeFrom,
+  rangeTo,
+  setRangeTo,
   onApplyPreset,
   bundleId,
   setBundleId,
@@ -167,6 +183,50 @@ export function LogFiltersBar({
 
   return (
     <div className="card filters-card">
+      <div className="filters-presets log-time-presets">
+        <span className="filters-presets-label">Time:</span>
+        {LOG_RANGE_PRESETS.map((o) => (
+          <button
+            key={o.hours}
+            type="button"
+            className={`btn btn-sm ${timeRange === o.hours ? "primary" : ""}`}
+            onClick={() => setTimeRange(o.hours)}
+          >
+            {o.label}
+          </button>
+        ))}
+        <button
+          type="button"
+          className={`btn btn-sm ${timeRange === "all" ? "primary" : ""}`}
+          onClick={() => setTimeRange("all")}
+        >
+          All
+        </button>
+        <button
+          type="button"
+          className={`btn btn-sm ${timeRange === "custom" ? "primary" : ""}`}
+          onClick={() => setTimeRange("custom")}
+        >
+          Custom
+        </button>
+        {timeRange === "custom" && (
+          <div className="log-time-custom">
+            <input
+              type="datetime-local"
+              value={rangeFrom}
+              onChange={(e) => setRangeFrom(e.target.value)}
+              aria-label="From"
+            />
+            <span className="muted">→</span>
+            <input
+              type="datetime-local"
+              value={rangeTo}
+              onChange={(e) => setRangeTo(e.target.value)}
+              aria-label="To"
+            />
+          </div>
+        )}
+      </div>
       <div className="filters-presets">
         <span className="filters-presets-label">Quick:</span>
         <button type="button" className="btn btn-sm" onClick={() => onApplyPreset("all")}>

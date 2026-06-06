@@ -252,6 +252,12 @@ export default function LiveMonitor() {
             setSearch={filters.setSearch}
             suppressPeerNoise={filters.suppressPeerNoise}
             setSuppressPeerNoise={filters.setSuppressPeerNoise}
+            timeRange={filters.timeRange}
+            setTimeRange={filters.setTimeRange}
+            rangeFrom={filters.rangeFrom}
+            setRangeFrom={filters.setRangeFrom}
+            rangeTo={filters.rangeTo}
+            setRangeTo={filters.setRangeTo}
             onApplyPreset={filters.applyPreset}
           />
 
@@ -262,6 +268,7 @@ export default function LiveMonitor() {
             mode="live"
             paused={paused}
             lastRefresh={lastLogRefresh}
+            timeRangeLabel={filters.timeRangeLabel}
             peerNoiseFiltered={peerNoiseFiltered}
             onRefresh={refreshLogs}
             onPauseToggle={() => setPaused((p) => !p)}

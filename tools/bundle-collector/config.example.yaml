@@ -9,6 +9,11 @@ patroni_url: http://127.0.0.1:8008
 
 lines_per_source: 500
 
+# Optional extra PostgreSQL log paths (files or globs) if auto-discovery misses them
+# postgres_log_paths:
+#   - /data/pglogs/postgresql-*.log
+#   - /opt/postgres/log/*.log
+
 # Map Patroni member IP/host -> docker container name on this machine
 docker_hosts:
   "172.20.0.2": bundlecollect-cihangedik-node0

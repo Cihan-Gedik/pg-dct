@@ -41,6 +41,8 @@ export default function Backup() {
   const [submitKind, setSubmitKind] = useState<BackupJobKind>("backup_full");
   const [submitStanza, setSubmitStanza] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [settingUp, setSettingUp] = useState(false);
+  const [runFirstBackupOnSetup, setRunFirstBackupOnSetup] = useState(true);
   const [expandedJobId, setExpandedJobId] = useState<number | null>(null);
 
   useEffect(() => {
@@ -118,6 +120,8 @@ export default function Backup() {
   const backupCount = stanzas.reduce((n, s) => n + (s.backup?.length ?? 0), 0);
   const repoBytes = sumRepoSizeBytes(stanzas);
 
+  const showSetup = info && (info.needs_setup || !info.ok);
+
   const submitJob = async () => {
     setSubmitting(true);
     setJobErr(null);
@@ -135,6 +139,21 @@ export default function Backup() {
     }
   };
 
+  const runSetup = async () => {
+    setSettingUp(true);
+    setJobErr(null);
+    try {
+      await api.backupSetup(clusterId, { run_first_backup: runFirstBackupOnSetup });
+      await refreshJobs();
+      await refreshInfo();
+      setActiveTab("jobs");
+    } catch (e) {
+      setJobErr(String(e));
+    } finally {
+      setSettingUp(false);
+    }
+  };
+
   return (
     <div className="backup-page">
       <header className="page-header compact">
@@ -143,6 +162,15 @@ export default function Backup() {
           <p className="sub">pgBackRest — overview, jobs, schedules, WAL, storage</p>
         </div>
         <div className="row header-actions">
+          <button
+            type="button"
+            className="btn"
+            disabled={settingUp || loadingInfo}
+            onClick={runSetup}
+            title="Install config, stanza-create, check on all nodes"
+          >
+            {settingUp ? "Setting up…" : "Setup pgBackRest"}
+          </button>
           <button
             type="button"
             className="btn primary"
@@ -192,16 +220,42 @@ export default function Backup() {
 
           {info && (
             <>
-              {!info.ok && (
+              {showSetup && (
                 <div className="alert-banner">
-                  <p>{info.error ?? "pgBackRest info unavailable"}</p>
+                  <p>{info.error ?? "pgBackRest needs one-time setup on this cluster"}</p>
                   {info.stdout_tail && (
                     <pre className="backup-stdout-preview">{info.stdout_tail}</pre>
                   )}
                   <p className="hint">
-                    Enable pgBackRest on the leader container and add{" "}
-                    <code>pgbackrest: {"{ enabled: true, stanza: ... }"}</code> to{" "}
-                    <code>config/docker-clusters.yaml</code>.
+                    Click <strong>Setup pgBackRest</strong> once, or run any backup job — setup runs
+                    automatically if needed.
+                  </p>
+                  <div className="row" style={{ marginTop: 12 }}>
+                    <label className="filter-checkbox">
+                      <input
+                        type="checkbox"
+                        checked={runFirstBackupOnSetup}
+                        onChange={(e) => setRunFirstBackupOnSetup(e.target.checked)}
+                      />
+                      Run first full backup after setup
+                    </label>
+                    <button
+                      type="button"
+                      className="btn primary"
+                      disabled={settingUp || loadingInfo}
+                      onClick={runSetup}
+                    >
+                      {settingUp ? "Setting up…" : "Setup pgBackRest"}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {info.ok && !info.needs_setup && backupCount === 0 && (
+                <div className="card" style={{ marginBottom: 12 }}>
+                  <p className="card-desc">
+                    Stanza exists but no backups yet. Run <strong>backup_full</strong> from the Jobs tab,
+                    or use Setup again with first backup enabled.
                   </p>
                 </div>
               )}
@@ -245,16 +299,22 @@ export default function Backup() {
 
       {tab === "jobs" && (
         <section className="tab-panel">
+          <p className="hint card-desc">
+            Old <strong>failed</strong> jobs with <code>pg1-path</code> are from before Setup — ignore them.
+            Select cluster → header <strong>Setup pgBackRest</strong> once per cluster, then run a new{" "}
+            <strong>backup_full</strong>.
+          </p>
           <div className="card backup-job-form">
             <h2 className="card-title">Safe ops — new job</h2>
             <p className="card-desc">
-              Allowed: {JOB_KINDS.join(", ")}. Restore and stanza-delete are not exposed.
+              Allowed: {JOB_KINDS.filter((k) => k !== "setup").join(", ")}. Use Overview → Setup for
+              first-time install. Restore and stanza-delete are not exposed.
             </p>
             <div className="row filters">
               <div className="field">
                 <label>Kind</label>
                 <select value={submitKind} onChange={(e) => setSubmitKind(e.target.value as BackupJobKind)}>
-                  {JOB_KINDS.map((k) => (
+                  {JOB_KINDS.filter((k) => k !== "setup").map((k) => (
                     <option key={k} value={k}>
                       {k}
                     </option>

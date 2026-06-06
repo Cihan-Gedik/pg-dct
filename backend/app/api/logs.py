@@ -10,11 +10,10 @@ from app.models import Cluster
 from app.schemas import LogEntryRead, LogLevel, LogSource, LogsResponse
 from app.services.cluster_config import load_cluster_docker_hosts
 from app.services.docker_logs import (
-    entry_within_hours,
     fetch_cluster_logs,
     suppress_etcd_peer_noise,
 )
-from app.services.logs_filter import filter_log_entries
+from app.services.logs_filter import filter_by_time_window, filter_log_entries, parse_range_datetime
 from app.services.patroni import PatroniDiscoveryError, fetch_cluster_members
 
 router = APIRouter(prefix="/clusters", tags=["logs"])
@@ -35,6 +34,8 @@ async def get_cluster_logs(
     search: str = Query(default=""),
     lines: int = Query(default=80, ge=10, le=500),
     hours: float | None = Query(default=None, ge=1, le=720),
+    range_from: str | None = Query(default=None, description="ISO datetime lower bound (inclusive)"),
+    range_to: str | None = Query(default=None, description="ISO datetime upper bound (inclusive)"),
     suppress_peer_noise: bool = Query(default=False),
     session: AsyncSession = Depends(get_session),
 ) -> LogsResponse:
@@ -92,8 +93,12 @@ async def get_cluster_logs(
         raw = suppress_etcd_peer_noise(raw, down_hosts)
         peer_filtered = before - len(raw)
     filtered = filter_log_entries(raw, node, levels, source_modes, search)
-    if hours is not None:
-        filtered = [e for e in filtered if entry_within_hours(e, hours)]
+    rf = parse_range_datetime(range_from)
+    rt = parse_range_datetime(range_to)
+    if rf is not None or rt is not None:
+        filtered = filter_by_time_window(filtered, range_from=rf, range_to=rt)
+    elif hours is not None:
+        filtered = filter_by_time_window(filtered, hours=hours)
 
     return LogsResponse(
         cluster_id=cluster_id,

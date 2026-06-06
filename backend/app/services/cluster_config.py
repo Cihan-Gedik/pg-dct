@@ -38,8 +38,23 @@ def load_cluster_pgbackrest(cluster_id: str) -> dict[str, str | bool]:
             continue
         pgb = raw.get("pgbackrest") or {}
         if not isinstance(pgb, dict):
-            return {"enabled": False, "stanza": ""}
+            pgb = {}
         stanza = str(pgb.get("stanza") or "").strip()
-        enabled = bool(pgb.get("enabled", bool(stanza)))
+        if not stanza:
+            stanza = str(raw.get("patroni_scope") or raw.get("id") or cluster_id).strip()
+        docker_hosts = raw.get("docker_hosts") or {}
+        enabled = bool(pgb.get("enabled", bool(docker_hosts)))
         return {"enabled": enabled, "stanza": stanza}
     return {"enabled": False, "stanza": ""}
+
+
+def load_cluster_containers(cluster_id: str) -> list[str]:
+    """Unique docker container names for a cluster (lab)."""
+    hosts = load_cluster_docker_hosts(cluster_id)
+    seen: set[str] = set()
+    out: list[str] = []
+    for name in hosts.values():
+        if name not in seen:
+            seen.add(name)
+            out.append(name)
+    return out

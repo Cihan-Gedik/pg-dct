@@ -98,6 +98,12 @@ export default function LetsCheckLogs() {
         setSearch={filters.setSearch}
         suppressPeerNoise={filters.suppressPeerNoise}
         setSuppressPeerNoise={filters.setSuppressPeerNoise}
+        timeRange={filters.timeRange}
+        setTimeRange={filters.setTimeRange}
+        rangeFrom={filters.rangeFrom}
+        setRangeFrom={filters.setRangeFrom}
+        rangeTo={filters.rangeTo}
+        setRangeTo={filters.setRangeTo}
         onApplyPreset={filters.applyPreset}
       />
 
@@ -107,6 +113,7 @@ export default function LetsCheckLogs() {
         error={err}
         mode="live"
         lastRefresh={lastRefresh}
+        timeRangeLabel={filters.timeRangeLabel}
         peerNoiseFiltered={peerNoiseFiltered}
         onRefresh={refresh}
       />

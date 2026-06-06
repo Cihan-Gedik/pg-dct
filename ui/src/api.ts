@@ -105,6 +105,7 @@ export type ClusterTimeline = {
 };
 
 export type BackupJobKind =
+  | "setup"
   | "backup_full"
   | "backup_diff"
   | "backup_incr"
@@ -114,6 +115,7 @@ export type BackupJobKind =
 export type BackupInfo = {
   cluster_id: string;
   ok: boolean;
+  needs_setup?: boolean;
   error: string | null;
   container: string | null;
   member: string | null;
@@ -286,6 +288,12 @@ export const api = {
   },
   backupInfo: (id: string) => request<BackupInfo>(`/api/v1/clusters/${id}/backup/info`),
   backupJobs: (id: string) => request<BackupJob[]>(`/api/v1/clusters/${id}/backup/jobs`),
+  backupSetup: (id: string, body?: { run_first_backup?: boolean; stanza?: string }) =>
+    request<BackupJob>(`/api/v1/clusters/${id}/backup/setup`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body ?? {}),
+    }),
   createBackupJob: (id: string, body: { kind: BackupJobKind; params?: Record<string, string> }) =>
     request<BackupJob>(`/api/v1/clusters/${id}/backup/jobs`, {
       method: "POST",

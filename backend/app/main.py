@@ -6,6 +6,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.api.bootstrap import router as bootstrap_router
 from app.api.dashboard import router as dashboard_router
@@ -22,6 +23,29 @@ from app.services.bootstrap import bootstrap_clusters, default_clusters_path
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 FAVICON_PATH = STATIC_DIR / "favicon.svg"
+
+
+class SPAStaticFiles(StaticFiles):
+    """Serve Vite build assets and fall back to index.html for client-side routes."""
+
+    async def get_response(self, path: str, scope):
+        spa = False
+        try:
+            response = await super().get_response(path, scope)
+        except StarletteHTTPException as exc:
+            if exc.status_code != 404 or not self._spa_fallback(path):
+                raise
+            spa = True
+            response = await super().get_response("index.html", scope)
+        if path in ("", "index.html") or spa:
+            response.headers["Cache-Control"] = "no-cache"
+        return response
+
+    @staticmethod
+    def _spa_fallback(path: str) -> bool:
+        if not path or path == "index.html":
+            return False
+        return "." not in path.rsplit("/", 1)[-1]
 
 
 @asynccontextmanager
@@ -75,7 +99,7 @@ async def favicon_root() -> FileResponse:
 
 
 if STATIC_DIR.is_dir():
-    app.mount("/ui", StaticFiles(directory=str(STATIC_DIR), html=True), name="ui")
+    app.mount("/ui", SPAStaticFiles(directory=str(STATIC_DIR), html=True), name="ui")
 
 
 @app.get("/", include_in_schema=False)

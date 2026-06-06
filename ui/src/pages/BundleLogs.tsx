@@ -22,7 +22,7 @@ export default function BundleLogs() {
 
   const initialCluster = searchParams.get("cluster") || "lc-pg-main";
   const severityFromUrl = searchParams.get("severity");
-  const filters = useLogFilters(initialCluster, severityFromUrl);
+  const filters = useLogFilters(initialCluster, severityFromUrl, { defaultTimeRange: "all" });
 
   useEffect(() => {
     api.listClusters().then(setClusters);
@@ -185,6 +185,12 @@ export default function BundleLogs() {
             setSearch={filters.setSearch}
             suppressPeerNoise={filters.suppressPeerNoise}
             setSuppressPeerNoise={filters.setSuppressPeerNoise}
+            timeRange={filters.timeRange}
+            setTimeRange={filters.setTimeRange}
+            rangeFrom={filters.rangeFrom}
+            setRangeFrom={filters.setRangeFrom}
+            rangeTo={filters.rangeTo}
+            setRangeTo={filters.setRangeTo}
             onApplyPreset={filters.applyPreset}
             showBundle
             includeLiveBundleOption={false}
@@ -199,6 +205,7 @@ export default function BundleLogs() {
             error={err}
             mode="archive"
             lastRefresh={lastRefresh}
+            timeRangeLabel={filters.timeRangeLabel}
             peerNoiseFiltered={peerNoiseFiltered}
             onRefresh={refresh}
           />

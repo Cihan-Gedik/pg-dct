@@ -28,6 +28,18 @@ Other commands
   ./pgdct-bundle-collect.sh --pick 2        # pick item 2
   ./pgdct-bundle-collect.sh -c config.yaml  # manual config (no discovery)
   ./pgdct-bundle-collect.sh --no-prompt     # no follow-up questions
+  ./pgdct-bundle-collect.sh --sources postgres,os   # force sources (overrides auto)
+
+PostgreSQL logs (source=postgres) are discovered via:
+  - journalctl for postgresql/postgres systemd units
+  - psql SHOW log_directory + log_filename (when psql works)
+  - common paths under /var/log/postgresql, /var/lib/pgsql, etc.
+  - optional postgres_log_paths in config.yaml
+  - interactive prompt if nothing found
+
+Auto sources (when --sources is omitted):
+  - Local PostgreSQL / no Patroni systemd unit → postgres, os only
+  - Docker or host Patroni cluster → patroni, postgres, etcd, os
 
 Notes for host Patroni:
   - For remote nodes in Patroni membership, collector tries SSH by host name/IP.

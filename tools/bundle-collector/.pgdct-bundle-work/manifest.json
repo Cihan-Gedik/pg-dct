@@ -1,0 +1,81 @@
+{
+  "collector": "pg-dct-bundle-collector",
+  "collector_version": "2.0.0",
+  "cluster_label": "bc-pg-main",
+  "patroni_scope": "bc-pg-main",
+  "created_at": "2026-05-27T19:56:18.511494+00:00",
+  "lines_per_source": 120,
+  "sources": [
+    "patroni",
+    "postgres",
+    "etcd",
+    "os"
+  ],
+  "nodes": [
+    {
+      "host": "172.20.0.2",
+      "container": "bundlecollect-cihangedik-node0",
+      "member_name": "bc-pg-main-0"
+    },
+    {
+      "host": "172.20.0.4",
+      "container": "bundlecollect-cihangedik-node2",
+      "member_name": "bc-pg-main23946-1"
+    },
+    {
+      "host": "172.20.0.3",
+      "container": "bundlecollect-cihangedik-node1",
+      "member_name": "bc-pg-main5652-1"
+    }
+  ],
+  "patroni_snapshot": [
+    {
+      "name": "bc-pg-main-0",
+      "role": "leader",
+      "state": "running",
+      "api_url": "http://172.20.0.2:8008/patroni",
+      "host": "172.20.0.2",
+      "port": 5432,
+      "timeline": 1
+    },
+    {
+      "name": "bc-pg-main23946-1",
+      "role": "replica",
+      "state": "streaming",
+      "api_url": "http://172.20.0.4:8008/patroni",
+      "host": "172.20.0.4",
+      "port": 5432,
+      "timeline": 1,
+      "receive_lag": 0,
+      "receive_lsn": "0/5000000",
+      "replay_lag": 0,
+      "replay_lsn": "0/5000000",
+      "lag": 0,
+      "lsn": "0/5000000"
+    },
+    {
+      "name": "bc-pg-main5652-1",
+      "role": "replica",
+      "state": "streaming",
+      "api_url": "http://172.20.0.3:8008/patroni",
+      "host": "172.20.0.3",
+      "port": 5432,
+      "timeline": 1,
+      "receive_lag": 0,
+      "receive_lsn": "0/5000000",
+      "replay_lag": 0,
+      "replay_lsn": "0/5000000",
+      "lag": 0,
+      "lsn": "0/5000000"
+    }
+  ],
+  "hostname": "3ae4a7411973",
+  "discovery": {
+    "kind": "docker_patroni",
+    "label": "Docker Patroni \u2014 bc-pg-main (3 nodes)",
+    "detail": "containers: bundlecollect-cihangedik-node0, bundlecollect-cihangedik-node1, bundlecollect-cihangedik-node2",
+    "patroni_scope": "bc-pg-main"
+  },
+  "skipped_nodes": [],
+  "line_count": 1025
+}
