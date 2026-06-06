@@ -5,6 +5,7 @@ import {
   type BackupInfo,
   type BackupJob,
   type BackupJobKind,
+  type BackupSchedule,
   type ClusterListItem,
 } from "../api";
 import {
@@ -27,6 +28,8 @@ const SCHEDULE_KINDS: BackupJobKind[] = ["backup_full", "backup_diff", "backup_i
 
 type Tab = "overview" | "jobs" | "schedules" | "wal" | "storage";
 
+const formatDateTime = (value?: string | null) => value ? new Date(value).toLocaleString() : "—";
+
 export default function Backup() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [clusters, setClusters] = useState<ClusterListItem[]>([]);
@@ -34,14 +37,23 @@ export default function Backup() {
   const [tab, setTab] = useState<Tab>((searchParams.get("tab") as Tab) || "overview");
   const [info, setInfo] = useState<BackupInfo | null>(null);
   const [jobs, setJobs] = useState<BackupJob[]>([]);
+  const [schedules, setSchedules] = useState<BackupSchedule[]>([]);
   const [loadingInfo, setLoadingInfo] = useState(false);
   const [loadingJobs, setLoadingJobs] = useState(false);
+  const [loadingSchedules, setLoadingSchedules] = useState(false);
   const [infoErr, setInfoErr] = useState<string | null>(null);
   const [jobErr, setJobErr] = useState<string | null>(null);
+  const [scheduleErr, setScheduleErr] = useState<string | null>(null);
   const [submitKind, setSubmitKind] = useState<BackupJobKind>("backup_full");
   const [submitStanza, setSubmitStanza] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [expandedJobId, setExpandedJobId] = useState<number | null>(null);
+  const [scheduleName, setScheduleName] = useState("Nightly full backup");
+  const [scheduleKind, setScheduleKind] = useState<BackupJobKind>("backup_full");
+  const [scheduleCron, setScheduleCron] = useState("0 2 * * *");
+  const [scheduleStanza, setScheduleStanza] = useState("");
+  const [scheduleSubmitting, setScheduleSubmitting] = useState(false);
+  const [scheduleActionId, setScheduleActionId] = useState<number | null>(null);
 
   useEffect(() => {
     api.listClusters().then((list) => {
@@ -96,14 +108,28 @@ export default function Backup() {
     }
   }, [clusterId]);
 
+  const refreshSchedules = useCallback(async () => {
+    if (!clusterId) return;
+    setLoadingSchedules(true);
+    setScheduleErr(null);
+    try {
+      setSchedules(await api.backupSchedules(clusterId));
+    } catch (e) {
+      setScheduleErr(String(e));
+    } finally {
+      setLoadingSchedules(false);
+    }
+  }, [clusterId]);
+
   const refreshAll = useCallback(async () => {
-    await Promise.all([refreshInfo(), refreshJobs()]);
-  }, [refreshInfo, refreshJobs]);
+    await Promise.all([refreshInfo(), refreshJobs(), refreshSchedules()]);
+  }, [refreshInfo, refreshJobs, refreshSchedules]);
 
   useEffect(() => {
     refreshInfo();
     refreshJobs();
-  }, [clusterId, refreshInfo, refreshJobs]);
+    refreshSchedules();
+  }, [clusterId, refreshInfo, refreshJobs, refreshSchedules]);
 
   const stanzas = useMemo(() => {
     const raw = info?.stanzas ?? [];
@@ -132,6 +158,66 @@ export default function Backup() {
       setJobErr(String(e));
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const submitSchedule = async () => {
+    setScheduleSubmitting(true);
+    setScheduleErr(null);
+    try {
+      await api.createBackupSchedule(clusterId, {
+        name: scheduleName.trim(),
+        kind: scheduleKind,
+        cron: scheduleCron.trim(),
+        stanza: scheduleStanza.trim(),
+        enabled: true,
+      });
+      setScheduleName(scheduleKind === "backup_full" ? "Nightly full backup" : "Scheduled backup");
+      setScheduleStanza("");
+      await refreshSchedules();
+    } catch (e) {
+      setScheduleErr(String(e));
+    } finally {
+      setScheduleSubmitting(false);
+    }
+  };
+
+  const toggleSchedule = async (schedule: BackupSchedule) => {
+    setScheduleActionId(schedule.id);
+    setScheduleErr(null);
+    try {
+      await api.updateBackupSchedule(clusterId, schedule.id, { enabled: !schedule.enabled });
+      await refreshSchedules();
+    } catch (e) {
+      setScheduleErr(String(e));
+    } finally {
+      setScheduleActionId(null);
+    }
+  };
+
+  const deleteSchedule = async (schedule: BackupSchedule) => {
+    setScheduleActionId(schedule.id);
+    setScheduleErr(null);
+    try {
+      await api.deleteBackupSchedule(clusterId, schedule.id);
+      await refreshSchedules();
+    } catch (e) {
+      setScheduleErr(String(e));
+    } finally {
+      setScheduleActionId(null);
+    }
+  };
+
+  const runScheduleNow = async (schedule: BackupSchedule) => {
+    setScheduleActionId(schedule.id);
+    setScheduleErr(null);
+    try {
+      await api.runBackupSchedule(clusterId, schedule.id);
+      await Promise.all([refreshSchedules(), refreshJobs(), refreshInfo()]);
+    } catch (e) {
+      setScheduleErr(String(e));
+    } finally {
+      setScheduleActionId(null);
     }
   };
 
@@ -181,6 +267,7 @@ export default function Backup() {
               <span className="tab-meta"> · {backupCount} backups</span>
             )}
             {id === "jobs" && <span className="tab-meta"> · {jobs.length}</span>}
+            {id === "schedules" && <span className="tab-meta"> · {schedules.length}</span>}
           </button>
         ))}
       </nav>
@@ -315,7 +402,7 @@ export default function Backup() {
                             {j.status}
                           </span>
                         </td>
-                        <td className="mono-sm">{new Date(j.created_at).toLocaleString()}</td>
+                        <td className="mono-sm">{formatDateTime(j.created_at)}</td>
                         <td>{j.exit_code ?? "—"}</td>
                       </tr>
                       {expandedJobId === j.id && (
@@ -336,17 +423,149 @@ export default function Backup() {
 
       {tab === "schedules" && (
         <section className="tab-panel">
-          <div className="card">
+          <div className="card backup-schedule-form">
             <h2 className="card-title">Backup schedules</h2>
             <p className="card-desc">
-              Cron schedules ({SCHEDULE_KINDS.join(", ")}) — coming in a later phase. Use Jobs for
-              one-off backups today.
+              Cron schedules run in UTC and execute the same allowlisted pgBackRest backup jobs used
+              by the Jobs tab.
             </p>
+            <div className="row filters">
+              <div className="field wide-field">
+                <label>Name</label>
+                <input
+                  value={scheduleName}
+                  onChange={(e) => setScheduleName(e.target.value)}
+                  placeholder="Nightly full backup"
+                />
+              </div>
+              <div className="field">
+                <label>Kind</label>
+                <select
+                  value={scheduleKind}
+                  onChange={(e) => setScheduleKind(e.target.value as BackupJobKind)}
+                >
+                  {SCHEDULE_KINDS.map((k) => (
+                    <option key={k} value={k}>
+                      {k}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="field">
+                <label>Cron (UTC)</label>
+                <input
+                  className="mono-sm"
+                  value={scheduleCron}
+                  onChange={(e) => setScheduleCron(e.target.value)}
+                  placeholder="0 2 * * *"
+                />
+              </div>
+              <div className="field">
+                <label>Stanza (optional)</label>
+                <input
+                  value={scheduleStanza}
+                  onChange={(e) => setScheduleStanza(e.target.value)}
+                  placeholder={info?.stanza || "default from yaml"}
+                />
+              </div>
+              <button
+                type="button"
+                className="btn primary"
+                disabled={scheduleSubmitting || !scheduleName.trim() || !scheduleCron.trim()}
+                onClick={submitSchedule}
+              >
+                {scheduleSubmitting ? "Saving…" : "Create schedule"}
+              </button>
+            </div>
             <ul className="backup-schedule-presets muted">
-              <li>Every day · 02:00 UTC — <code>0 2 * * *</code></li>
+              <li>Every day at 02:00 UTC — <code>0 2 * * *</code></li>
               <li>Every 6 hours — <code>0 */6 * * *</code></li>
-              <li>Sundays · 03:00 UTC — <code>0 3 * * 0</code></li>
+              <li>Sundays at 03:00 UTC — <code>0 3 * * 0</code></li>
             </ul>
+            {scheduleErr && <div className="err">{scheduleErr}</div>}
+          </div>
+
+          <div className="card">
+            <div className="row" style={{ justifyContent: "space-between", marginBottom: 8 }}>
+              <h2 className="card-title" style={{ margin: 0 }}>
+                Schedule registry
+              </h2>
+              <button type="button" className="btn" disabled={loadingSchedules} onClick={refreshSchedules}>
+                {loadingSchedules ? "Refreshing…" : "Refresh"}
+              </button>
+            </div>
+            {schedules.length === 0 && (
+              <p className="muted">No schedules for this cluster yet.</p>
+            )}
+            {schedules.length > 0 && (
+              <table>
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Kind</th>
+                    <th>Cron</th>
+                    <th>Next run</th>
+                    <th>Last run</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {schedules.map((s) => (
+                    <tr key={s.id}>
+                      <td>
+                        <strong>{s.name}</strong>
+                        {s.stanza && (
+                          <div className="mono-sm muted">stanza: {s.stanza}</div>
+                        )}
+                      </td>
+                      <td><span className="badge info">{s.kind}</span></td>
+                      <td className="mono-sm">{s.cron}</td>
+                      <td className="mono-sm">{formatDateTime(s.next_run_at)}</td>
+                      <td className="mono-sm">{formatDateTime(s.last_run_at)}</td>
+                      <td>
+                        <span className={`badge ${s.enabled ? "leader" : "warning"}`}>
+                          {s.enabled ? "enabled" : "paused"}
+                        </span>
+                        {s.last_status && (
+                          <span className={`badge ${s.last_status === "succeeded" ? "leader" : "critical"} schedule-last-status`}>
+                            {s.last_status}
+                          </span>
+                        )}
+                      </td>
+                      <td>
+                        <div className="row schedule-actions">
+                          <button
+                            type="button"
+                            className="btn"
+                            disabled={scheduleActionId === s.id}
+                            onClick={() => toggleSchedule(s)}
+                          >
+                            {s.enabled ? "Pause" : "Enable"}
+                          </button>
+                          <button
+                            type="button"
+                            className="btn"
+                            disabled={scheduleActionId === s.id}
+                            onClick={() => runScheduleNow(s)}
+                          >
+                            Run now
+                          </button>
+                          <button
+                            type="button"
+                            className="btn"
+                            disabled={scheduleActionId === s.id}
+                            onClick={() => deleteSchedule(s)}
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
           </div>
         </section>
       )}
