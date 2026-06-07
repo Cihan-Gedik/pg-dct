@@ -140,6 +140,22 @@ export type BackupJob = {
   error: string | null;
 };
 
+export type BackupSchedule = {
+  id: number;
+  cluster_id: string;
+  name: string;
+  kind: BackupJobKind;
+  cron: string;
+  stanza: string;
+  enabled: boolean;
+  next_run_at: string | null;
+  last_run_at: string | null;
+  last_status: string | null;
+  last_job_id: number | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type PostgresSetting = {
   name: string;
   label: string;
@@ -233,6 +249,18 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return body as T;
 }
 
+export type ClusterOpResult = {
+  ok: boolean;
+  cluster_id: string;
+  action: string;
+  container?: string | null;
+  leader?: string | null;
+  candidate?: string | null;
+  message?: string | null;
+  output?: string | null;
+  error?: string | null;
+};
+
 export const api = {
   health: () => request<{ status: string }>("/health"),
   listClusters: () => request<ClusterListItem[]>("/api/v1/clusters"),
@@ -243,7 +271,25 @@ export const api = {
     );
   },
   getCluster: (id: string) => request<ClusterRead>(`/api/v1/clusters/${id}`),
+  deleteCluster: (id: string) =>
+    request<void>(`/api/v1/clusters/${encodeURIComponent(id)}`, { method: "DELETE" }),
   discover: (id: string) => request<unknown>(`/api/v1/clusters/${id}/discover`, { method: "POST" }),
+  startNode: (clusterId: string, nodeRef: string) =>
+    request<ClusterOpResult>(`/api/v1/clusters/${clusterId}/nodes/${encodeURIComponent(nodeRef)}/start`, {
+      method: "POST",
+    }),
+  stopNode: (clusterId: string, nodeRef: string) =>
+    request<ClusterOpResult>(`/api/v1/clusters/${clusterId}/nodes/${encodeURIComponent(nodeRef)}/stop`, {
+      method: "POST",
+    }),
+  switchover: (clusterId: string, body?: { candidate?: string }) =>
+    request<ClusterOpResult>(`/api/v1/clusters/${clusterId}/switchover`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body ?? {}),
+    }),
+  refreshPatroniProxy: (clusterId: string) =>
+    request<ClusterOpResult>(`/api/v1/clusters/${clusterId}/proxy/refresh`, { method: "POST" }),
   bootstrapDocker: () => request<unknown>("/api/v1/bootstrap/docker", { method: "POST" }),
   live: (id: string) => request<LiveCluster>(`/api/v1/clusters/${id}/live`),
   postgresSettings: (id: string) =>
@@ -299,5 +345,32 @@ export const api = {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
+    }),
+  backupSchedules: (id: string) =>
+    request<BackupSchedule[]>(`/api/v1/clusters/${id}/backup/schedules`),
+  createBackupSchedule: (
+    id: string,
+    body: { name: string; kind: BackupJobKind; cron: string; stanza?: string; enabled?: boolean },
+  ) =>
+    request<BackupSchedule>(`/api/v1/clusters/${id}/backup/schedules`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }),
+  updateBackupSchedule: (
+    id: string,
+    scheduleId: number,
+    body: Partial<{ name: string; kind: BackupJobKind; cron: string; stanza: string; enabled: boolean }>,
+  ) =>
+    request<BackupSchedule>(`/api/v1/clusters/${id}/backup/schedules/${scheduleId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }),
+  deleteBackupSchedule: (id: string, scheduleId: number) =>
+    request<void>(`/api/v1/clusters/${id}/backup/schedules/${scheduleId}`, { method: "DELETE" }),
+  runBackupSchedule: (id: string, scheduleId: number) =>
+    request<BackupJob>(`/api/v1/clusters/${id}/backup/schedules/${scheduleId}/run`, {
+      method: "POST",
     }),
 };

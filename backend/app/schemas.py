@@ -62,6 +62,22 @@ class DiscoverResult(BaseModel):
     members: list[NodeRead]
 
 
+class SwitchoverRequest(BaseModel):
+    candidate: str | None = None
+
+
+class ClusterOpResponse(BaseModel):
+    ok: bool
+    cluster_id: str
+    action: str
+    container: str | None = None
+    leader: str | None = None
+    candidate: str | None = None
+    message: str | None = None
+    output: str | None = None
+    error: str | None = None
+
+
 class LogEntryRead(BaseModel):
     ts: str
     node: str
@@ -307,3 +323,40 @@ class BackupJobRead(BaseModel):
     exit_code: int | None = None
     stdout_tail: str = ""
     error: str | None = None
+
+
+BackupScheduleKind = Literal["backup_full", "backup_diff", "backup_incr"]
+
+
+class BackupScheduleCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=128)
+    kind: BackupScheduleKind
+    cron: str = Field(min_length=9, max_length=64)
+    stanza: str = Field(default="", max_length=128)
+    enabled: bool = True
+
+
+class BackupScheduleUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=128)
+    kind: BackupScheduleKind | None = None
+    cron: str | None = Field(default=None, min_length=9, max_length=64)
+    stanza: str | None = Field(default=None, max_length=128)
+    enabled: bool | None = None
+
+
+class BackupScheduleRead(BaseModel):
+    id: int
+    cluster_id: str
+    name: str
+    kind: str
+    cron: str
+    stanza: str = ""
+    enabled: bool
+    next_run_at: datetime | None = None
+    last_run_at: datetime | None = None
+    last_status: str | None = None
+    last_job_id: int | None = None
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}

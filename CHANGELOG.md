@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Backup schedules:** Added UTC cron schedules for pgBackRest full/diff/incr backups, with persistent schedule registry, API scheduler loop, and UI controls for create, pause/enable, run-now, and delete.
+
 ### Changed
 
 ### Fixed

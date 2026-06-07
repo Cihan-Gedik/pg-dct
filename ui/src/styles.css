@@ -55,6 +55,8 @@ h1 { margin: 0; font-size: 1.6rem; letter-spacing: -0.03em; }
   font-size: 13px;
 }
 .btn.primary { background: #2563eb; border-color: #2563eb; }
+.btn.destructive { background: #7f1d1d; border-color: #991b1b; color: #fecaca; }
+.btn.destructive:hover:not(:disabled) { background: #991b1b; }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .badge {
   display: inline-block;
@@ -274,8 +276,31 @@ th { color: #64748b; font-size: 11px; text-transform: uppercase; }
 .action-links { display: flex; gap: 8px; flex-wrap: wrap; }
 .action-links .btn { padding: 6px 10px; font-size: 12px; }
 
+.cluster-ops { margin-bottom: 12px; }
+.cluster-ops-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 16px;
+}
+.cluster-ops-row .hint { color: var(--muted); font-size: 13px; flex: 1; min-width: 200px; }
+
+.ok-banner {
+  background: rgba(34, 197, 94, 0.12);
+  border: 1px solid rgba(34, 197, 94, 0.35);
+  color: #bbf7d0;
+  padding: 10px 14px;
+  border-radius: 8px;
+  margin-bottom: 12px;
+}
+
 .header-actions { flex-wrap: wrap; }
 .btn-sm { padding: 5px 10px; font-size: 12px; }
+
+.settings-cluster-table { width: 100%; margin-top: 12px; border-collapse: collapse; }
+.settings-cluster-table th,
+.settings-cluster-table td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); }
+.settings-cluster-table code { font-size: 12px; }
 
 .live-page-simple .page-header.compact { margin-bottom: 4px; }
 .live-page-simple .sub { margin-bottom: 12px; }
@@ -761,8 +786,13 @@ td.num.warning { color: #fbbf24; }
 .job-row-clickable { cursor: pointer; }
 .job-row-clickable:hover { background: #33415540; }
 .backup-job-form { margin-bottom: 14px; }
+.backup-schedule-form { margin-bottom: 14px; }
 .backup-schedule-presets { margin: 0; padding-left: 18px; font-size: 13px; }
 .backup-schedule-presets li { margin: 6px 0; }
+.backup-page .wide-field input { min-width: 220px; }
+.schedule-actions { gap: 6px; flex-wrap: nowrap; }
+.schedule-actions .btn { padding: 6px 9px; }
+.schedule-last-status { margin-left: 6px; }
 
 .backup-timeline-empty {
   padding: 32px;

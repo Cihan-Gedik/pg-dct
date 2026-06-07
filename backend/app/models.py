@@ -38,3 +38,23 @@ class Node(Base):
     last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     cluster: Mapped["Cluster"] = relationship(back_populates="nodes")
+
+
+class BackupSchedule(Base):
+    __tablename__ = "backup_schedules"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    cluster_id: Mapped[str] = mapped_column(String(64), ForeignKey("clusters.id", ondelete="CASCADE"))
+    name: Mapped[str] = mapped_column(String(128), nullable=False)
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    cron: Mapped[str] = mapped_column(String(64), nullable=False)
+    stanza: Mapped[str] = mapped_column(String(128), default="", nullable=False)
+    enabled: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    next_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_status: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    last_job_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )

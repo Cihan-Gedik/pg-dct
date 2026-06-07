@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { api, type ClusterListItem, type LiveCluster, type LogEntry } from "../api";
+import { api, type ClusterListItem, type LiveCluster, type LiveMember, type LogEntry } from "../api";
 import { ClusterSelector } from "../components/ClusterSelector";
 import { DcsHealthPanel } from "../components/DcsHealthPanel";
 import { EtcdMemberTable } from "../components/EtcdMemberTable";
@@ -25,6 +25,9 @@ export default function LiveMonitor() {
   const [lastLiveRefresh, setLastLiveRefresh] = useState<Date | null>(null);
   const [lastLogRefresh, setLastLogRefresh] = useState<Date | null>(null);
   const [paused, setPaused] = useState(false);
+  const [opsBusyMember, setOpsBusyMember] = useState<string | null>(null);
+  const [opsMsg, setOpsMsg] = useState<string | null>(null);
+  const [opsErr, setOpsErr] = useState<string | null>(null);
 
   const initial = searchParams.get("cluster") || "lc-pg-main";
   const filters = useLogFilters(initial);
@@ -118,6 +121,50 @@ export default function LiveMonitor() {
   }, [paused, tab, refreshLive, refreshLogs]);
 
   const leaderMember = live?.members.find((m) => m.role === "leader");
+  const dockerLab = Boolean(live?.members.some((m) => m.container));
+
+  const runOp = async (
+    memberKey: string | null,
+    label: string,
+    fn: () => Promise<{ ok: boolean; message?: string | null; error?: string | null }>,
+  ) => {
+    setOpsBusyMember(memberKey ?? "__global__");
+    setOpsMsg(null);
+    setOpsErr(null);
+    try {
+      const result = await fn();
+      if (result.ok) {
+        setOpsMsg(result.message || `${label} succeeded`);
+        await Promise.all([refreshLive(), api.discover(filters.clusterId).catch(() => undefined)]);
+      } else {
+        setOpsErr(result.error || `${label} failed`);
+      }
+    } catch (e) {
+      setOpsErr(String(e));
+    } finally {
+      setOpsBusyMember(null);
+    }
+  };
+
+  const handleStart = (member: LiveMember) => {
+    const ref = member.container || member.host || member.name;
+    void runOp(member.name, `Start ${member.name}`, () => api.startNode(filters.clusterId, ref));
+  };
+
+  const handleStop = (member: LiveMember) => {
+    const ref = member.container || member.host || member.name;
+    void runOp(member.name, `Stop ${member.name}`, () => api.stopNode(filters.clusterId, ref));
+  };
+
+  const handleSwitchover = (member: LiveMember) => {
+    void runOp(member.name, `Switchover → ${member.name}`, () =>
+      api.switchover(filters.clusterId, { candidate: member.name }),
+    );
+  };
+
+  const handleRefreshProxy = () => {
+    void runOp(null, "Refresh proxy", () => api.refreshPatroniProxy(filters.clusterId));
+  };
 
   return (
     <div className="live-page live-page-simple">
@@ -216,9 +263,38 @@ export default function LiveMonitor() {
                 </div>
               </div>
 
+              {opsErr && <div className="err">{opsErr}</div>}
+              {opsMsg && <div className="ok-banner">{opsMsg}</div>}
+
+              {dockerLab && (
+                <div className="cluster-ops card">
+                  <div className="cluster-ops-row">
+                    <strong>Cluster operations</strong>
+                    <span className="hint">Docker lab — start/stop nodes or promote a replica</span>
+                    <button
+                      type="button"
+                      className="btn btn-sm"
+                      disabled={Boolean(opsBusyMember)}
+                      onClick={handleRefreshProxy}
+                    >
+                      Refresh Patroni proxy
+                    </button>
+                  </div>
+                </div>
+              )}
+
               <DcsHealthPanel live={live} dcs={live.dcs} />
 
-              <MemberTable members={live.members} leader={live.leader} title="Patroni members" />
+              <MemberTable
+                members={live.members}
+                leader={live.leader}
+                title="Patroni members"
+                dockerLab={dockerLab}
+                busyMember={opsBusyMember}
+                onStart={dockerLab ? handleStart : undefined}
+                onStop={dockerLab ? handleStop : undefined}
+                onSwitchover={dockerLab ? handleSwitchover : undefined}
+              />
 
               <EtcdMemberTable
                 members={live.etcd_members ?? []}

@@ -1,3 +1,4 @@
+import asyncio
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -18,6 +19,7 @@ from app.api.backups import router as backups_router
 from app.api.bundles import router as bundles_router
 from app.config import settings
 from app.db import SessionLocal, init_db
+from app.services.backup_schedules import scheduler_loop as backup_scheduler_loop
 from app.services.bootstrap import bootstrap_clusters, default_clusters_path
 
 
@@ -54,7 +56,15 @@ async def lifespan(_app: FastAPI):
     if os.getenv("PGDCT_BOOTSTRAP_DOCKER", "").lower() in ("1", "true", "yes"):
         async with SessionLocal() as session:
             await bootstrap_clusters(session, default_clusters_path())
-    yield
+    scheduler_task = asyncio.create_task(backup_scheduler_loop(SessionLocal))
+    try:
+        yield
+    finally:
+        scheduler_task.cancel()
+        try:
+            await scheduler_task
+        except asyncio.CancelledError:
+            pass
 
 
 app = FastAPI(

@@ -11,16 +11,35 @@ from app.models import Cluster, Node
 from app.schemas import (
     ClusterCreate,
     ClusterListItem,
+    ClusterOpResponse,
     ClusterRead,
     DiscoverResult,
     NodeRead,
     PostgresSettingRead,
     PostgresSettingsResponse,
+    SwitchoverRequest,
+)
+from app.services.cluster_ops import (
+    cluster_containers,
+    patroni_switchover,
+    refresh_patroni_proxies,
+    start_cluster_node,
+    stop_cluster_node,
 )
 from app.services.patroni import PatroniDiscoveryError, fetch_cluster_members, member_to_node_fields
 from app.services.postgres_settings import fetch_postgres_settings
 
 router = APIRouter(prefix="/clusters", tags=["clusters"])
+
+
+async def _get_cluster(session: AsyncSession, cluster_id: str) -> Cluster:
+    result = await session.execute(
+        select(Cluster).where(Cluster.id == cluster_id).options(selectinload(Cluster.nodes))
+    )
+    cluster = result.scalar_one_or_none()
+    if not cluster:
+        raise HTTPException(status_code=404, detail="Cluster not found")
+    return cluster
 
 
 def _cluster_to_read(cluster: Cluster) -> ClusterRead:
@@ -151,6 +170,100 @@ async def discover_cluster(
 
     nodes = [NodeRead.model_validate(n) for n in cluster.nodes]
     return DiscoverResult(cluster_id=cluster.id, discovered=len(nodes), members=nodes)
+
+
+def _require_docker_lab(cluster_id: str) -> dict[str, str]:
+    hosts = cluster_containers(cluster_id)
+    if not hosts:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cluster '{cluster_id}' has no docker_hosts — start/stop/switchover is lab-only",
+        )
+    return hosts
+
+
+@router.post("/{cluster_id}/nodes/{node_ref}/start", response_model=ClusterOpResponse)
+async def start_node(
+    cluster_id: str,
+    node_ref: str,
+    session: AsyncSession = Depends(get_session),
+) -> ClusterOpResponse:
+    await _get_cluster(session, cluster_id)
+    _require_docker_lab(cluster_id)
+    result = await start_cluster_node(cluster_id, node_ref)
+    return ClusterOpResponse(
+        cluster_id=cluster_id,
+        action="start",
+        container=result.get("container"),
+        ok=bool(result.get("ok")),
+        output=result.get("output"),
+        error=result.get("error"),
+        message="Node started" if result.get("ok") else None,
+    )
+
+
+@router.post("/{cluster_id}/nodes/{node_ref}/stop", response_model=ClusterOpResponse)
+async def stop_node(
+    cluster_id: str,
+    node_ref: str,
+    session: AsyncSession = Depends(get_session),
+) -> ClusterOpResponse:
+    await _get_cluster(session, cluster_id)
+    _require_docker_lab(cluster_id)
+    result = await stop_cluster_node(cluster_id, node_ref)
+    return ClusterOpResponse(
+        cluster_id=cluster_id,
+        action="stop",
+        container=result.get("container"),
+        ok=bool(result.get("ok")),
+        output=result.get("output"),
+        error=result.get("error"),
+        message="Node stopped" if result.get("ok") else None,
+    )
+
+
+@router.post("/{cluster_id}/switchover", response_model=ClusterOpResponse)
+async def switchover_cluster(
+    cluster_id: str,
+    body: SwitchoverRequest,
+    session: AsyncSession = Depends(get_session),
+) -> ClusterOpResponse:
+    cluster = await _get_cluster(session, cluster_id)
+    _require_docker_lab(cluster_id)
+    result = await patroni_switchover(cluster.patroni_seed_url, candidate=body.candidate)
+    if result.get("ok"):
+        try:
+            await discover_cluster(cluster_id, session)
+        except HTTPException:
+            pass
+    return ClusterOpResponse(
+        cluster_id=cluster_id,
+        action="switchover",
+        ok=bool(result.get("ok")),
+        leader=result.get("leader"),
+        candidate=result.get("candidate"),
+        message=result.get("message"),
+        output=result.get("proxy_refresh_output"),
+        error=result.get("error"),
+    )
+
+
+@router.post("/{cluster_id}/proxy/refresh", response_model=ClusterOpResponse)
+async def refresh_proxy(
+    cluster_id: str,
+    session: AsyncSession = Depends(get_session),
+) -> ClusterOpResponse:
+    await _get_cluster(session, cluster_id)
+    _require_docker_lab(cluster_id)
+    code, out = await refresh_patroni_proxies()
+    return ClusterOpResponse(
+        cluster_id=cluster_id,
+        action="proxy_refresh",
+        ok=code == 0,
+        output=out,
+        error=None if code == 0 else f"expose-patroni-ports.sh exit {code}",
+        message="Patroni proxies refreshed" if code == 0 else None,
+    )
 
 
 @router.get("/{cluster_id}/postgres/settings", response_model=PostgresSettingsResponse)
